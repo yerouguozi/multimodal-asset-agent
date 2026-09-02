@@ -26,7 +26,7 @@ FastAPI · SQLAlchemy · SQLite · LangGraph · SiliconFlow（多模态）· Dee
 
 ## 开发进度
 
-见 [docs/04-开发计划.md](docs/04-开发计划.md)，当前阶段：5（LangGraph 素材助理 Agent + SSE 对话）已完成。
+见 [docs/04-开发计划.md](docs/04-开发计划.md)，当前阶段：6（React 完整前端）已完成。
 
 ## 快速开始
 
@@ -41,7 +41,17 @@ Copy-Item .env.example .env   # 可选：填入 SILICONFLOW_API_KEY / DEEPSEEK_A
 .\.venv\Scripts\python -m uvicorn app.main:app --reload --port 8000
 `
 
-打开 <http://127.0.0.1:8000> 使用内置演示页；接口文档 <http://127.0.0.1:8000/docs>。
+打开 <http://127.0.0.1:8000> 使用内置精简演示页；接口文档 <http://127.0.0.1:8000/docs>。
+
+### 2. 前端（React 完整界面）
+
+`powershell
+cd frontend
+npm install
+npm run dev
+`
+
+打开 <http://localhost:5173>（Vite 已配置代理到后端 8000）。
 
 > 不填 API Key 也能跑：图片/文档自动入库、缩略图、去重、关键词检索照常工作；
 > 填入 Key 后自动启用视觉理解打标、文档摘要和语义检索。
