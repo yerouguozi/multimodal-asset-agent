@@ -58,7 +58,8 @@ class LocalVectorStore:
             return
         ids = np.array(list(self._vectors.keys()), dtype=np.int64)
         mat = np.stack(list(self._vectors.values()))
-        tmp = self.path.with_suffix(".npz.tmp")
+        # 注意：np.savez 会对不以 .npz 结尾的路径自动追加 .npz，临时文件必须以 .npz 结尾
+        tmp = self.path.parent / f"{self.path.stem}.tmp.npz"
         np.savez(tmp, ids=ids, mat=mat)
         tmp.replace(self.path)
 

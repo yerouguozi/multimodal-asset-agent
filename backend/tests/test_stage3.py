@@ -89,3 +89,27 @@ def test_domain_profile_fallback(client):
     assert d["labels"] == []
     assert "共" in d["summary"]
     assert d["by_modality"] == {"document": 1}
+
+
+def test_search_strategy_skips_rerank(client, monkeypatch):
+    """bm25/rrf 策略下不调用重排。"""
+    monkeypatch.setattr(llm_client, "embed_texts", lambda texts: None)
+    monkeypatch.setattr(
+        llm_client, "vision_describe",
+        lambda b64, mime: VisionResult(description="夜景图片", tags=["夜景"], ocr=""),
+    )
+    upload_image(client, "a.png")
+    upload_image(client, "b.png")
+
+    def boom(q, docs):
+        raise AssertionError("该策略不应调用重排")
+
+    monkeypatch.setattr(llm_client, "rerank", boom)
+
+    from app.core.database import SessionLocal
+    from app.retrieval import search as search_service
+
+    with SessionLocal() as db:
+        for strategy in ("bm25", "rrf"):
+            hits = search_service.search(db, "夜景", limit=10, strategy=strategy)
+            assert len(hits) == 2

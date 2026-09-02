@@ -18,6 +18,7 @@
 - [02-架构设计](docs/02-架构设计.md)
 - [03-开发规范](docs/03-开发规范.md)
 - [04-开发计划](docs/04-开发计划.md)
+- [检索评测报告](docs/eval-reports/检索评测报告.md)
 
 ## 技术栈
 
@@ -25,7 +26,7 @@ FastAPI · SQLAlchemy · SQLite · LangGraph · SiliconFlow（多模态）· Dee
 
 ## 开发进度
 
-见 [docs/04-开发计划.md](docs/04-开发计划.md)，当前阶段：3（混合检索 BM25+RRF+重排 + 领域画像）已完成。
+见 [docs/04-开发计划.md](docs/04-开发计划.md)，当前阶段：4（检索评测：Recall@1 0.705→0.833）已完成。
 
 ## 快速开始
 

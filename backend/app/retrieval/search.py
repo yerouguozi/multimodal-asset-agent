@@ -81,7 +81,9 @@ def search(
     modality: str | None = None,
     tag: str | None = None,
     limit: int = 20,
+    strategy: str = "full",
 ) -> list[tuple[Asset, float]]:
+    """strategy: bm25=仅关键词 / rrf=关键词+向量 / full=再加重排（默认）。"""
     query = (query or "").strip()
     if not query:
         return []
@@ -103,7 +105,7 @@ def search(
 
     # 2) 向量召回（embedding 可用时）
     vec_scores: dict[int, float] = {}
-    if len(vector_store) > 0:
+    if strategy in ("rrf", "full") and len(vector_store) > 0:
         try:
             vecs = llm_client.embed_texts([query])
             if vecs:
@@ -121,7 +123,7 @@ def search(
     candidates = [(asset_by_id[i], s) for i, s in ranked if i in asset_by_id]
 
     # 4) 重排精排（失败自动降级）
-    if len(candidates) >= 2:
+    if strategy == "full" and len(candidates) >= 2:
         try:
             texts = [" ".join(v for v in _searchable_text(a).values())[:500] for a, _ in candidates]
             rerank_scores = llm_client.rerank(query, texts)
