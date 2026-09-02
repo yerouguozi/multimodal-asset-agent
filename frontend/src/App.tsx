@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { deleteAsset, fetchAssets, fetchDomainProfile, searchAssets, uploadFiles } from "./api";
-import type { Asset, DomainProfile } from "./types";
+import { deleteAsset, fetchAssets, fetchDomainProfile, searchAssets, uploadFiles, fetchUsageSummary } from "./api";
+import type { Asset, DomainProfile, UsageSummary } from "./types";
 import AssetDetailModal from "./components/AssetDetailModal";
 import AssetGrid from "./components/AssetGrid";
 import ChatPanel from "./components/ChatPanel";
@@ -16,6 +16,7 @@ export default function App() {
   const [tag, setTag] = useState("");
   const [selected, setSelected] = useState<Asset | null>(null);
   const [profile, setProfile] = useState<DomainProfile | null>(null);
+  const [usage, setUsage] = useState<UsageSummary | null>(null);
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const timerRef = useRef<number | undefined>(undefined);
@@ -42,9 +43,14 @@ export default function App() {
     void load();
   }, [load]);
 
-  useEffect(() => {
+  const refreshMeta = useCallback(() => {
     fetchDomainProfile().then(setProfile).catch(() => undefined);
+    fetchUsageSummary().then(setUsage).catch(() => undefined);
   }, []);
+
+  useEffect(() => {
+    refreshMeta();
+  }, [refreshMeta]);
 
   const handleSearch = async () => {
     if (!query.trim()) {
@@ -80,6 +86,7 @@ export default function App() {
       });
       notify(msgs.join("；"));
       await load();
+      refreshMeta();
     } catch (e) {
       notify(`上传失败：${errMsg(e)}`);
     } finally {
@@ -94,7 +101,7 @@ export default function App() {
       if (selected?.id === id) setSelected(null);
       notify(`已删除 #${id}`);
       await load();
-      fetchDomainProfile().then(setProfile).catch(() => undefined);
+      refreshMeta();
     } catch (e) {
       notify(`删除失败：${errMsg(e)}`);
     }
@@ -126,8 +133,8 @@ export default function App() {
         </section>
 
         <aside className="right">
-          <ChatPanel />
-          <DomainProfileCard profile={profile} onRefresh={() => fetchDomainProfile().then(setProfile).catch(() => undefined)} />
+          <ChatPanel onComplete={() => { void load(); refreshMeta(); }} />
+          <DomainProfileCard profile={profile} usage={usage} onRefresh={refreshMeta} />
         </aside>
       </main>
 

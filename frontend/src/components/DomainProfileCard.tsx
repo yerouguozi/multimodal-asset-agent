@@ -1,11 +1,12 @@
-import type { DomainProfile } from "../types";
+import type { DomainProfile, UsageSummary } from "../types";
 
 interface Props {
   profile: DomainProfile | null;
+  usage: UsageSummary | null;
   onRefresh: () => void;
 }
 
-export default function DomainProfileCard({ profile, onRefresh }: Props) {
+export default function DomainProfileCard({ profile, usage, onRefresh }: Props) {
   return (
     <section className="panel profile-panel">
       <div className="panel-head">
@@ -39,6 +40,12 @@ export default function DomainProfileCard({ profile, onRefresh }: Props) {
             ))}
           </div>
           <div className="weights">自适应检索权重 {JSON.stringify(profile.adaptive_weights)}</div>
+          {usage && (
+            <div className="weights" style={{ marginTop: 6 }}>
+              模型调用 {usage.total_calls} 次 · 估算成本 ${usage.total_cost.toFixed(4)}
+              {usage.by_model && `（${Object.keys(usage.by_model).length} 种模型）`}
+            </div>
+          )}
         </>
       ) : (
         <div className="empty">加载中…</div>

@@ -20,7 +20,7 @@ def upload_image(client, name):
 def seed_night_scene(client, monkeypatch):
     monkeypatch.setattr(
         llm_client, "vision_describe",
-        lambda b64, mime: VisionResult(description="城市夜景", tags=["夜景", "城市"], ocr=""),
+        lambda b64, mime, model=None: VisionResult(description="城市夜景", tags=["夜景", "城市"], ocr=""),
     )
     upload_image(client, "城市夜景.png")
 

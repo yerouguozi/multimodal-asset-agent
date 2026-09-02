@@ -5,6 +5,7 @@ import type {
   DomainProfile,
   SearchResponse,
   UploadItem,
+  UsageSummary,
 } from "./types";
 
 async function j<T>(r: Response): Promise<T> {
@@ -45,6 +46,10 @@ export function fetchAsset(id: number): Promise<Asset> {
 
 export function fetchDomainProfile(): Promise<DomainProfile> {
   return fetch("/api/domain/profile").then((r) => j<DomainProfile>(r));
+}
+
+export function fetchUsageSummary(): Promise<UsageSummary> {
+  return fetch("/api/usage/summary").then((r) => j<UsageSummary>(r));
 }
 
 export async function chatStream(

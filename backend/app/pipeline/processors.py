@@ -1,7 +1,9 @@
 """模态适配器：把"理解素材"这件事按模态拆成可插拔的处理器。
 
-新增模态 = 新增一个 process_xxx 函数并注册，核心引擎不变
-（沿用 agent-qc-platform 的驱动适配器模式）。
+新增模态 = 新增一个 process_xxx 函数并注册，核心引擎不变。
+阶段 7 增强：
+- 模型路由：小图走轻量模型（8B），大图走大模型（32B），控制成本；
+- 每次模型调用记录 UsageLog（成本追踪）。
 """
 from __future__ import annotations
 
@@ -22,6 +24,7 @@ import imagehash
 from ..core.config import settings
 from ..llm.client import MultimodalClient
 from ..models import Asset
+from ..usage import record_usage
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +45,7 @@ class ProcessingResult:
     width: int | None = None
     height: int | None = None
     duration: float | None = None
+    vision_model: str | None = None
 
 
 # ---------- 通用工具 ----------
@@ -74,6 +78,13 @@ def _media_duration(path: Path) -> float | None:
     except Exception as e:
         logger.warning("解析时长失败 %s: %s", path.name, e)
     return None
+
+
+def _route_vision_model(max_side: int) -> str:
+    """模型路由：小图走轻量模型，大图走大模型（成本优化的核心规则）。"""
+    if max_side <= settings.simple_image_max_side:
+        return settings.vision_model_cheap
+    return settings.vision_model
 
 
 def _extract_keyframes(src: Path, out_dir: Path, max_frames: int, duration: float | None) -> list[Path]:
@@ -149,8 +160,12 @@ def process_image(asset: Asset, llm: MultimodalClient, data_root: Path) -> Proce
         result.thumbnail_path = f"thumbnails/{thumb_path.name}"
 
         b64 = _image_to_b64(img)
+        max_side = max(img.size)
 
-    vision = llm.vision_describe(b64, "image/jpeg")
+    model = _route_vision_model(max_side)
+    result.vision_model = model
+    vision = llm.vision_describe(b64, "image/jpeg", model=model)
+    record_usage(asset.id, model, "vision")
     if vision:
         result.description = vision.description
         result.tags = vision.tags
@@ -168,6 +183,7 @@ def process_document(asset: Asset, llm: MultimodalClient, data_root: Path) -> Pr
     if text:
         result.text_content = text[:TEXT_LIMIT]
         summary = llm.summarize_text(text[:3000])
+        record_usage(asset.id, settings.llm_model, "summary")
         if summary:
             result.description = summary.summary
             result.tags = summary.tags
@@ -234,12 +250,10 @@ def process_video(asset: Asset, llm: MultimodalClient, data_root: Path) -> Proce
     try:
         result.duration = _media_duration(src)
 
-        # 1) 封面（首帧）
         thumb = _first_frame(src, data_root / "thumbnails" / f"{asset.id}.jpg")
         if thumb:
             result.thumbnail_path = f"thumbnails/{thumb.name}"
 
-        # 2) 关键帧 → 视觉理解（描述/标签/OCR）
         frames = _extract_keyframes(src, work, settings.video_max_frames, result.duration)
         descs: list[str] = []
         tags: list[str] = []
@@ -248,7 +262,10 @@ def process_video(asset: Asset, llm: MultimodalClient, data_root: Path) -> Proce
             try:
                 with Image.open(f) as img:
                     img.load()
-                    vision = llm.vision_describe(_image_to_b64(img), "image/jpeg")
+                    model = _route_vision_model(max(img.size))
+                    vision = llm.vision_describe(_image_to_b64(img), "image/jpeg", model=model)
+                    record_usage(asset.id, model, "vision")
+                    result.vision_model = model
             except Exception as e:
                 logger.warning("关键帧理解失败 %s: %s", f.name, e)
                 continue
@@ -262,16 +279,16 @@ def process_video(asset: Asset, llm: MultimodalClient, data_root: Path) -> Proce
         result.tags = _top_tags(tags)
         result.ocr_text = _dedupe_join(ocrs, sep="\n", limit=2000)
 
-        # 3) 音轨 → 转写（无音轨/失败则跳过）
         wav = _extract_audio(src, work / "audio.wav", settings.audio_max_seconds)
         if wav:
             transcript = llm.transcribe_audio(wav)
+            record_usage(asset.id, settings.asr_model, "asr")
             if transcript:
                 result.transcript = transcript.strip()
 
-        # 4) 若视觉理解为空，用转写生成摘要兜底
         if not result.description and result.transcript:
             summary = llm.summarize_text(result.transcript[:3000])
+            record_usage(asset.id, settings.llm_model, "summary")
             if summary:
                 result.description = summary.summary
                 result.tags = summary.tags
@@ -297,27 +314,26 @@ def process_audio(asset: Asset, llm: MultimodalClient, data_root: Path) -> Proce
     try:
         result.duration = _media_duration(src)
 
-        # 1) 占位缩略图
         thumb = _audio_placeholder(data_root / "thumbnails" / f"{asset.id}.jpg")
         result.thumbnail_path = f"thumbnails/{thumb.name}"
 
-        # 2) 转写（转 16k 单声道，限制时长控成本）
         wav = _extract_audio(src, work / "audio.wav", settings.audio_max_seconds)
         if wav:
             transcript = llm.transcribe_audio(wav)
+            record_usage(asset.id, settings.asr_model, "asr")
             if transcript:
                 result.transcript = transcript.strip()
 
-        # 3) 摘要 + 标签
         if result.transcript:
             summary = llm.summarize_text(result.transcript[:3000])
+            record_usage(asset.id, settings.llm_model, "summary")
             if summary:
                 result.description = summary.summary
                 result.tags = summary.tags
     finally:
         shutil.rmtree(work, ignore_errors=True)
         try:
-            work.parent.rmdir()  # 若 _work 已空则顺手删除
+            work.parent.rmdir()
         except OSError:
             pass
 

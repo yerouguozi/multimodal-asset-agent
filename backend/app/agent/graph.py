@@ -89,11 +89,43 @@ def intent_node(state: AgentState) -> dict:
 
 # ---------- 工具调用 ----------
 
+def _clean_prompt(text: str) -> str:
+    """去掉"帮我/生成一张"这类指令前缀，把剩下的当画面描述。"""
+    import re
+
+    t = re.sub(r"^(请|帮我|麻烦你|给我)?\s*(生成|画|做|创作)?\s*(一张|一副|一幅|一个)?\s*", "", text.strip())
+    return t.strip() or text.strip()
+
+
+def _parse_transform(text: str) -> tuple[int, str, dict]:
+    """从"压缩 #3""把#2转成mp4，最大边长800"这类指令里解析参数。"""
+    import re
+
+    m = re.search(r"#?\s*(\d+)", text)
+    asset_id = int(m.group(1)) if m else 0
+    operation = "compress"
+    params: dict = {}
+    if any(k in text for k in ("转格式", "转换", "转成", "convert")):
+        operation = "convert"
+        fm = re.search(r"(?:转成|转换成|转格式为|convert to|format)\s*[是为]?\s*([a-zA-Z0-9]+)", text)
+        if fm:
+            params["format"] = fm.group(1).lower()
+    elif any(k in text for k in ("缩放", "尺寸", "裁剪", "最大边长", "resize")):
+        operation = "resize"
+        sm = re.search(r"(\d{3,4})", text)
+        if sm:
+            params["max_side"] = int(sm.group(1))
+    return asset_id, operation, params
+
+
 def tool_node(state: AgentState) -> dict:
     intent = state["intent"]
     params = state.get("params", {})
-    if intent in ("generate", "transform"):
-        result = {"ok": False, "summary": "素材生成与处理功能将在后续阶段上线，我可以先帮你检索现有素材。", "assets": []}
+    if intent == "generate":
+        result = TOOL_REGISTRY["generate_image"](_clean_prompt(params.get("query", "")))
+    elif intent == "transform":
+        asset_id, operation, tparams = _parse_transform(params.get("query", ""))
+        result = TOOL_REGISTRY["transform_asset"](asset_id, operation, tparams)
     elif intent == "search":
         result = TOOL_REGISTRY["search_assets"](params.get("query", ""))
     elif intent == "detail":

@@ -111,11 +111,12 @@ class MultimodalClient:
 
     # ---------- 视觉理解 ----------
 
-    def vision_describe(self, image_b64: str, mime: str = "image/jpeg") -> VisionResult | None:
+    def vision_describe(self, image_b64: str, mime: str = "image/jpeg", model: str | None = None) -> VisionResult | None:
+        """视觉理解；model 为空时用 settings.vision_model（默认大模型），调用方可按需路由。"""
         if not self.settings.siliconflow_api_key:
             return None
         payload = {
-            "model": self.settings.vision_model,
+            "model": model or self.settings.vision_model,
             "temperature": 0.2,
             "max_tokens": 600,
             "messages": [
@@ -218,6 +219,43 @@ class MultimodalClient:
         message = (data.get("choices") or [{}])[0].get("message", {})
         content = message.get("content", "") or message.get("reasoning_content", "") or ""
         return content.strip() or None
+    # ---------- 文生图 ----------
+
+    def generate_image(self, prompt: str) -> bytes | None:
+        """SiliconFlow /images/generations：返回图片二进制；失败降级返回 None。"""
+        if not self.settings.siliconflow_api_key:
+            return None
+        url = f"{self.settings.siliconflow_base_url}/images/generations"
+        payload = {
+            "model": self.settings.image_gen_model,
+            "prompt": prompt,
+            "image_size": self.settings.image_gen_size,
+            "batch_size": 1,
+        }
+        try:
+            data = self._post(
+                url,
+                payload,
+                {"Authorization": f"Bearer {self.settings.siliconflow_api_key}"},
+                timeout=180.0,
+            )
+        except Exception as e:
+            logger.warning("generate_image 失败（已降级）: %s", e)
+            return None
+        item = (data.get("data") or [{}])[0]
+        b64 = item.get("b64_json")
+        if b64:
+            return base64.b64decode(b64)
+        image_url = item.get("url")
+        if image_url:
+            try:
+                resp = httpx.get(image_url, timeout=180.0)
+                resp.raise_for_status()
+                return resp.content
+            except Exception as e:
+                logger.warning("下载生成图片失败: %s", e)
+                return None
+        return None
     # ---------- 领域洞察 ----------
 
     def domain_insight(self, modality_summary: str, top_tags: list[str]) -> DomainInsight | None:

@@ -7,7 +7,7 @@ from app.llm.client import VisionResult, client as llm_client
 
 
 def test_image_pipeline_with_mocked_vision(client, monkeypatch):
-    def fake_describe(image_b64, mime):
+    def fake_describe(image_b64, mime, model=None):
         return VisionResult(
             description="城市夜景，摩天大楼，有雾霾",
             tags=["夜景", "城市", "雾霾"],

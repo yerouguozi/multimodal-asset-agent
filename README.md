@@ -26,7 +26,7 @@ FastAPI · SQLAlchemy · SQLite · LangGraph · SiliconFlow（多模态）· Dee
 
 ## 开发进度
 
-见 [docs/04-开发计划.md](docs/04-开发计划.md)，当前阶段：6（React 完整前端）已完成。
+见 [docs/04-开发计划.md](docs/04-开发计划.md)，当前阶段：7（文生图/素材处理/模型路由/成本追踪）已完成。
 
 ## 快速开始
 

@@ -39,6 +39,15 @@ class Settings(BaseSettings):
     # 多模态处理参数（阶段 2：视频/音频）
     asr_model: str = "FunAudioLLM/SenseVoiceSmall"
     rerank_model: str = "BAAI/bge-reranker-v2-m3"
+
+    # 模型路由：简单图片走轻量模型，复杂走大模型（成本优化）
+    vision_model_cheap: str = "Qwen/Qwen3-VL-8B-Instruct"
+    vision_model_pro: str = "Qwen/Qwen3-VL-32B-Instruct"
+    simple_image_max_side: int = 640
+
+    # 文生图
+    image_gen_model: str = "Qwen/Qwen-Image"
+    image_gen_size: str = "1024x1024"
     video_max_frames: int = 4
     audio_max_seconds: int = 600
 

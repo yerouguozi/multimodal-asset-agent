@@ -63,7 +63,7 @@ def test_video_processor_real_ffmpeg(tmp_path, monkeypatch):
 
     monkeypatch.setattr(
         llm_client, "vision_describe",
-        lambda b64, mime: VisionResult(description="蓝色测试画面", tags=["测试", "蓝色"], ocr=""),
+        lambda b64, mime, model=None: VisionResult(description="蓝色测试画面", tags=["测试", "蓝色"], ocr=""),
     )
     monkeypatch.setattr(llm_client, "transcribe_audio", lambda path: "这是一段测试语音转写内容")
 
@@ -85,7 +85,7 @@ def test_video_processor_no_llm(tmp_path, monkeypatch):
     src.parent.mkdir(parents=True)
     make_mp4(src)
 
-    monkeypatch.setattr(llm_client, "vision_describe", lambda b64, mime: None)
+    monkeypatch.setattr(llm_client, "vision_describe", lambda b64, mime, model=None: None)
     monkeypatch.setattr(llm_client, "transcribe_audio", lambda path: None)
 
     asset = make_asset("uploads/video/demo.mp4", "video")

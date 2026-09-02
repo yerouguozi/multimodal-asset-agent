@@ -46,6 +46,7 @@ class Asset(Base):
 
     sha256: Mapped[str] = mapped_column(String(64), index=True)
     phash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    vision_model: Mapped[str | None] = mapped_column(String(120), nullable=True)  # 实际用的视觉模型（路由记录）
 
     status: Mapped[str] = mapped_column(String(20), default="pending", index=True)
 
@@ -97,6 +98,18 @@ class IngestionJob(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
 
+
+class UsageLog(Base):
+    """模型调用记录（成本追踪）。cost_estimate 为按调用次数的估算值。"""
+
+    __tablename__ = "usage_logs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    asset_id: Mapped[int | None] = mapped_column(ForeignKey("assets.id"), nullable=True, index=True)
+    model: Mapped[str] = mapped_column(String(120))
+    operation: Mapped[str] = mapped_column(String(50))
+    cost_estimate: Mapped[float] = mapped_column(Float, default=0.0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 class Embedding(Base):
     """向量记录（本地向量库的落盘依据；保留表结构，后续可换 Milvus）。"""

@@ -28,10 +28,25 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False
 
 
 def init_db() -> None:
-    """建表（MVP 用 create_all，后续需要再上 Alembic 迁移）。"""
+    """建表（MVP 用 create_all + 轻量列迁移，后续需要再上 Alembic）。"""
     from app import models  # noqa: F401  确保模型注册到 Base.metadata
 
     Base.metadata.create_all(bind=engine)
+    _migrate_columns()
+
+
+def _migrate_columns() -> None:
+    """SQLite 下 create_all 不会给已有表加列，这里做最小迁移。"""
+    from sqlalchemy import inspect, text
+
+    try:
+        with engine.begin() as conn:
+            cols = {c["name"] for c in inspect(engine).get_columns("assets")}
+            if "vision_model" not in cols:
+                conn.execute(text("ALTER TABLE assets ADD COLUMN vision_model VARCHAR(120)"))
+    except Exception:
+        # 表不存在或已迁移，忽略
+        pass
 
 
 def get_db():

@@ -17,6 +17,7 @@ from ..llm.client import client as llm_client
 from ..models import Asset, IngestionJob, Tag
 from ..retrieval.vector_store import vector_store
 from .processors import build_embed_text, resolve_processor
+from ..usage import record_usage
 
 logger = logging.getLogger(__name__)
 
@@ -26,10 +27,12 @@ class IngestionManager:
         self._queue: asyncio.Queue[int] = asyncio.Queue()
         self._workers: list[asyncio.Task] = []
         self._sem = asyncio.Semaphore(settings.worker_count)
+        self._loop: asyncio.AbstractEventLoop | None = None
 
     # ---------- 生命周期 ----------
 
     async def start(self) -> None:
+        self._loop = asyncio.get_running_loop()
         if settings.ingestion_mode == "async" and not self._workers:
             for _ in range(settings.worker_count):
                 self._workers.append(asyncio.create_task(self._worker(), name="ingestion-worker"))
@@ -46,6 +49,16 @@ class IngestionManager:
             await self._process(asset_id)
         else:
             await self._queue.put(asset_id)
+
+    def submit_blocking(self, asset_id: int) -> None:
+        """给后台线程（Agent 工具）用的同步入队：跨线程安全投递到主事件循环。"""
+        if settings.ingestion_mode == "sync":
+            asyncio.run(self._process(asset_id))
+            return
+        if self._loop is None:
+            raise RuntimeError("入库管理器未启动")
+        fut = asyncio.run_coroutine_threadsafe(self._queue.put(asset_id), self._loop)
+        fut.result(timeout=15)
 
     async def _worker(self) -> None:
         while True:
@@ -97,6 +110,7 @@ class IngestionManager:
                         vecs = await asyncio.to_thread(llm_client.embed_texts, [embed_text])
                         if vecs:
                             vector_store.add(asset_id, vecs[0], settings.embedding_model)
+                            record_usage(asset_id, settings.embedding_model, "embed")
                     except Exception as e:
                         logger.warning("向量化失败（已降级）asset_id=%s: %s", asset_id, e)
                 return
@@ -128,6 +142,7 @@ class IngestionManager:
         asset.width = result.width
         asset.height = result.height
         asset.duration = result.duration
+        asset.vision_model = result.vision_model
         # 标签整体替换（LLM 来源）
         for t in list(asset.tags):
             if t.source == "llm":

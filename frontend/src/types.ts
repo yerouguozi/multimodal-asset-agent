@@ -58,6 +58,12 @@ export interface DomainProfile {
   summary: string;
 }
 
+export interface UsageSummary {
+  total_calls: number;
+  total_cost: number;
+  by_model: Record<string, number>;
+  recent: { asset_id: number | null; model: string; operation: string; cost: number; created_at: string }[];
+}
 export interface ChatEvent {
   stage?: string;
   content?: string;

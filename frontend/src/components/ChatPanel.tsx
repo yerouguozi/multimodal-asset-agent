@@ -6,7 +6,11 @@ interface Msg {
   text: string;
 }
 
-export default function ChatPanel() {
+interface Props {
+  onComplete?: () => void;
+}
+
+export default function ChatPanel({ onComplete }: Props) {
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -36,6 +40,7 @@ export default function ChatPanel() {
       setMsgs((m) => [...m, { role: "assistant", text: e instanceof Error ? e.message : String(e) }]);
     } finally {
       setBusy(false);
+      onComplete?.();
     }
   };
 

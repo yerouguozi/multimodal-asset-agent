@@ -21,12 +21,12 @@ def test_hybrid_search_bm25_ranking(client, monkeypatch):
 
     monkeypatch.setattr(
         llm_client, "vision_describe",
-        lambda b64, mime: VisionResult(description="夜晚城市建筑剪影", tags=["夜景", "建筑"], ocr=""),
+        lambda b64, mime, model=None: VisionResult(description="夜晚城市建筑剪影", tags=["夜景", "建筑"], ocr=""),
     )
     upload_image(client, "a.png")
     monkeypatch.setattr(
         llm_client, "vision_describe",
-        lambda b64, mime: VisionResult(description="产品海报促销活动", tags=["营销", "海报"], ocr=""),
+        lambda b64, mime, model=None: VisionResult(description="产品海报促销活动", tags=["营销", "海报"], ocr=""),
     )
     upload_image(client, "b.png")
 
@@ -43,7 +43,7 @@ def test_search_rerank_applied(client, monkeypatch):
     monkeypatch.setattr(llm_client, "embed_texts", lambda texts: None)
     monkeypatch.setattr(
         llm_client, "vision_describe",
-        lambda b64, mime: VisionResult(description="夜景图片", tags=["夜景"], ocr=""),
+        lambda b64, mime, model=None: VisionResult(description="夜景图片", tags=["夜景"], ocr=""),
     )
     upload_image(client, "a.png")
     upload_image(client, "b.png")
@@ -60,7 +60,7 @@ def test_search_rerank_applied(client, monkeypatch):
 def test_domain_profile_with_llm(client, monkeypatch):
     monkeypatch.setattr(
         llm_client, "vision_describe",
-        lambda b64, mime: VisionResult(description="城市夜景", tags=["夜景", "城市"], ocr=""),
+        lambda b64, mime, model=None: VisionResult(description="城市夜景", tags=["夜景", "城市"], ocr=""),
     )
     upload_image(client, "n1.png")
     upload_image(client, "n2.png")
@@ -96,7 +96,7 @@ def test_search_strategy_skips_rerank(client, monkeypatch):
     monkeypatch.setattr(llm_client, "embed_texts", lambda texts: None)
     monkeypatch.setattr(
         llm_client, "vision_describe",
-        lambda b64, mime: VisionResult(description="夜景图片", tags=["夜景"], ocr=""),
+        lambda b64, mime, model=None: VisionResult(description="夜景图片", tags=["夜景"], ocr=""),
     )
     upload_image(client, "a.png")
     upload_image(client, "b.png")
