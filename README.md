@@ -25,7 +25,7 @@ FastAPI · SQLAlchemy · SQLite · LangGraph · SiliconFlow（多模态）· Dee
 
 ## 开发进度
 
-见 [docs/04-开发计划.md](docs/04-开发计划.md)，当前阶段：2（四类模态入库管线 + 视频/音频理解）已完成。
+见 [docs/04-开发计划.md](docs/04-开发计划.md)，当前阶段：3（混合检索 BM25+RRF+重排 + 领域画像）已完成。
 
 ## 快速开始
 

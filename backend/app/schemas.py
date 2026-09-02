@@ -80,6 +80,15 @@ class AssetPatch(BaseModel):
     add_tags: list[str] = []
 
 
+class DomainProfileOut(BaseModel):
+    total: int
+    by_modality: dict[str, int]
+    modality_shares: dict[str, float]
+    top_tags: list[dict[str, object]]
+    adaptive_weights: dict[str, float]
+    labels: list[str]
+    summary: str
+
 class AssetStatsOut(BaseModel):
     total: int
     by_modality: dict[str, int]

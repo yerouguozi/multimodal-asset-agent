@@ -62,6 +62,9 @@ def main() -> int:
     text = client.transcribe_audio(tmp)
     print("[asr] OK text =", repr(text) if text else "（空，静音属正常）")
 
+    # 4) 重排
+    rr = client.rerank("多模态素材检索", ["深度学习与向量检索", "产品促销活动方案"])
+    print("[rerank]", "OK scores =", [round(x, 3) for x in rr] if rr else "FAILED")
     # 4) DeepSeek 摘要
     if settings.deepseek_api_key:
         s = client.summarize_text("深度学习与多模态检索技术")

@@ -34,9 +34,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-from .api import assets, jobs, search, upload  # noqa: E402
+from .api import assets, domain, jobs, search, upload  # noqa: E402
 
 app.include_router(upload.router)
+app.include_router(domain.router)
 app.include_router(assets.router)
 app.include_router(search.router)
 app.include_router(jobs.router)

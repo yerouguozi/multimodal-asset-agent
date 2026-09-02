@@ -34,14 +34,27 @@
       <button onclick="upload()">上传</button>
       <input type="text" id="q" placeholder="自然语言搜索，如：夜景 / 营销方案 / 雾霾">
       <button onclick="doSearch()">搜索</button>
-      <button onclick="loadAll()">全部素材</button>
+      <button onclick="loadAll()">全部素材</button><button onclick="showProfile()">素材库画像</button>
     </div>
     <div id="notice"></div>
   </div>
-  <div id="grid" class="grid" style="margin-top:18px;"></div>
+  <div id="profile"></div>`n  <div id="grid" class="grid" style="margin-top:18px;"></div>
 </main>
 <script>
-async function upload() {
+async function showProfile() {
+  const d = await (await fetch("/api/domain/profile")).json();
+  const bars = Object.entries(d.by_modality).map(([m, c]) =>
+    '<div style="margin:6px 0;font-size:12px">' + m + ' ' + c + ' 个' +
+    '<div style="background:#334155;height:8px;border-radius:4px;margin-top:2px">' +
+    '<div style="background:#3b82f6;height:8px;border-radius:4px;width:' + (c / Math.max(1, d.total) * 100) + '%"></div></div></div>').join("");
+  const labels = (d.labels || []).map(l => '<span class="tag">' + l + '</span>').join("");
+  document.getElementById("profile").innerHTML =
+    '<div class="card" style="margin-top:14px"><b>素材库画像</b>' +
+    '<div style="margin:8px 0;color:#cbd5e1;font-size:13px">' + d.summary + '</div>' +
+    (labels ? '<div>' + labels + '</div>' : '') +
+    '<div style="margin-top:10px">' + bars + '</div>' +
+    '<div style="font-size:11px;color:#64748b;margin-top:8px">自适应检索权重: ' + JSON.stringify(d.adaptive_weights) + '</div></div>';
+}async function upload() {
   const files = document.getElementById("file").files;
   if (!files.length) return;
   const fd = new FormData();

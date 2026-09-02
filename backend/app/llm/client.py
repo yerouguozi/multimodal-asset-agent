@@ -58,6 +58,18 @@ class SummaryResult:
     tags: list[str] = field(default_factory=list)
 
 
+@dataclass
+class DomainInsight:
+    labels: list[str] = field(default_factory=list)
+    summary: str | None = None
+
+
+DOMAIN_PROMPT = (
+    "你是素材库分析模块。根据模态分布和热门标签，判断这个素材库主要属于什么领域。"
+    "只输出一个 JSON 对象，不要输出任何其他文字。格式："
+    '{"labels": ["2-4个领域名称，如 电商设计素材库"], "summary": "一句话总结这个素材库的特点"}'
+)
+
 VISION_PROMPT = (
     "你是多模态素材管理系统的图像理解模块。请分析这张图片，"
     "只输出一个 JSON 对象，不要输出任何其他文字。格式："
@@ -151,6 +163,72 @@ class MultimodalClient:
             return None
         return [d["embedding"] for d in data.get("data", [])]
 
+    # ---------- 重排 ----------
+
+    def rerank(self, query: str, documents: list[str]) -> list[float] | None:
+        """SiliconFlow /rerank：给候选文档按相关性重新打分。失败降级返回 None。"""
+        if not self.settings.siliconflow_api_key or not documents:
+            return None
+        payload = {
+            "model": self.settings.rerank_model,
+            "query": query,
+            "documents": documents,
+            "top_n": len(documents),
+        }
+        try:
+            data = self._post(
+                f"{self.settings.siliconflow_base_url}/rerank",
+                payload,
+                {"Authorization": f"Bearer {self.settings.siliconflow_api_key}"},
+            )
+        except Exception as e:
+            logger.warning("rerank 失败（已降级）: %s", e)
+            return None
+        results = data.get("results", [])
+        if not results:
+            return None
+        scores = [0.0] * len(documents)
+        for r in results:
+            idx = r.get("index")
+            if isinstance(idx, int) and 0 <= idx < len(documents):
+                scores[idx] = float(r.get("relevance_score", 0.0))
+        return scores
+
+    # ---------- 领域洞察 ----------
+
+    def domain_insight(self, modality_summary: str, top_tags: list[str]) -> DomainInsight | None:
+        """根据模态分布与标签，让 LLM 给出领域名称与一句话总结。"""
+        if not self.settings.deepseek_api_key:
+            return None
+        text = f"模态分布：{modality_summary}\n热门标签：{'、'.join(top_tags)}"
+        payload = {
+            "model": self.settings.llm_model,
+            "temperature": 0.2,
+            "max_tokens": 1200,
+            "messages": [
+                {"role": "system", "content": DOMAIN_PROMPT},
+                {"role": "user", "content": text[:1500]},
+            ],
+        }
+        try:
+            data = self._post(
+                f"{self.settings.deepseek_base_url}/chat/completions",
+                payload,
+                {"Authorization": f"Bearer {self.settings.deepseek_api_key}"},
+            )
+        except Exception as e:
+            logger.warning("domain_insight 失败（已降级）: %s", e)
+            return None
+        message = (data.get("choices") or [{}])[0].get("message", {})
+        # 推理模型可能把答案写进 reasoning_content 而 content 为空，做兜底
+        content = message.get("content", "") or message.get("reasoning_content", "") or ""
+        parsed = parse_json_text(content)
+        if not parsed:
+            return None
+        return DomainInsight(
+            labels=[str(x).strip() for x in parsed.get("labels", []) if str(x).strip()],
+            summary=(parsed.get("summary") or "").strip() or None,
+        )
     # ---------- 语音转写 ----------
 
     def _post_multipart(self, url: str, data: dict, files: dict, headers: dict) -> dict:
@@ -200,7 +278,7 @@ class MultimodalClient:
         payload = {
             "model": self.settings.llm_model,
             "temperature": 0.2,
-            "max_tokens": 500,
+            "max_tokens": 800,
             "messages": [
                 {"role": "system", "content": SUMMARY_PROMPT},
                 {"role": "user", "content": text[:3000]},
@@ -215,7 +293,8 @@ class MultimodalClient:
         except Exception as e:
             logger.warning("summarize_text 失败（已降级）: %s", e)
             return None
-        content = (data.get("choices") or [{}])[0].get("message", {}).get("content", "")
+        message = (data.get("choices") or [{}])[0].get("message", {})
+        content = message.get("content", "") or message.get("reasoning_content", "") or ""
         parsed = parse_json_text(content)
         if not parsed:
             return SummaryResult(summary=content.strip() or None)

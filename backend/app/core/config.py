@@ -38,6 +38,7 @@ class Settings(BaseSettings):
 
     # 多模态处理参数（阶段 2：视频/音频）
     asr_model: str = "FunAudioLLM/SenseVoiceSmall"
+    rerank_model: str = "BAAI/bge-reranker-v2-m3"
     video_max_frames: int = 4
     audio_max_seconds: int = 600
 
