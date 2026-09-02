@@ -15,6 +15,7 @@ import time
 from dataclasses import dataclass, field
 
 import httpx
+from pathlib import Path
 
 from ..core.config import settings
 
@@ -150,6 +151,47 @@ class MultimodalClient:
             return None
         return [d["embedding"] for d in data.get("data", [])]
 
+    # ---------- 语音转写 ----------
+
+    def _post_multipart(self, url: str, data: dict, files: dict, headers: dict) -> dict:
+        last_err: Exception | None = None
+        for attempt in range(1, self.settings.llm_max_retries + 1):
+            try:
+                resp = httpx.post(
+                    url,
+                    data=data,
+                    files=files,
+                    headers=headers,
+                    timeout=self.settings.llm_timeout,
+                )
+                if resp.status_code >= 400:
+                    raise LLMError(f"HTTP {resp.status_code}: {resp.text[:300]}")
+                return resp.json()
+            except (httpx.TimeoutException, httpx.TransportError, LLMError) as e:
+                last_err = e
+                if attempt < self.settings.llm_max_retries:
+                    time.sleep(1.5**attempt)
+        raise last_err if last_err else LLMError("unknown error")
+
+    def transcribe_audio(self, path: Path) -> str | None:
+        """音频转写（SiliconFlow /audio/transcriptions）。失败降级返回 None，不影响入库。"""
+        if not self.settings.siliconflow_api_key:
+            return None
+        url = f"{self.settings.siliconflow_base_url}/audio/transcriptions"
+        headers = {"Authorization": f"Bearer {self.settings.siliconflow_api_key}"}
+        try:
+            with open(path, "rb") as f:
+                data = self._post_multipart(
+                    url,
+                    {"model": self.settings.asr_model},
+                    {"file": (path.name, f, "application/octet-stream")},
+                    headers,
+                )
+        except Exception as e:
+            logger.warning("transcribe_audio 失败（已降级）: %s", e)
+            return None
+        text = (data.get("text") or "").strip()
+        return text or None
     # ---------- 文档摘要 ----------
 
     def summarize_text(self, text: str) -> SummaryResult | None:

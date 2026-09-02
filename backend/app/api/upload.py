@@ -63,9 +63,6 @@ async def upload(files: list[UploadFile] = File(...), db: Session = Depends(get_
         if modality is None:
             items.append(UploadItem(error=f"不支持的文件类型: {f.filename or ''}"))
             continue
-        if modality in ("video", "audio"):
-            items.append(UploadItem(error=f"{modality} 处理将在阶段 2 上线，暂不支持上传"))
-            continue
 
         content = await f.read()
         if not content:

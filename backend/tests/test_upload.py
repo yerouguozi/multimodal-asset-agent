@@ -29,10 +29,10 @@ def test_upload_duplicate(client):
     assert client.get("/api/assets").json()["total"] == 1
 
 
-def test_upload_unsupported_video(client):
-    r = client.post("/api/upload", files={"files": ("clip.mp4", b"fake-video", "video/mp4")})
+def test_upload_unknown_type(client):
+    r = client.post("/api/upload", files={"files": ("archive.xyz", b"123", "application/x-xyz")})
     assert r.status_code == 200
-    assert "阶段 2" in r.json()["items"][0]["error"]
+    assert "不支持" in r.json()["items"][0]["error"]
 
 
 def test_upload_document_text_extracted(client):

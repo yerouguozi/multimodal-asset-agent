@@ -36,6 +36,11 @@ class Settings(BaseSettings):
     vision_model: str = "Qwen/Qwen2.5-VL-32B-Instruct"
     embedding_model: str = "BAAI/bge-m3"
 
+    # 多模态处理参数（阶段 2：视频/音频）
+    asr_model: str = "FunAudioLLM/SenseVoiceSmall"
+    video_max_frames: int = 4
+    audio_max_seconds: int = 600
+
     # DeepSeek（文本摘要 / 标签）
     deepseek_api_key: str = ""
     deepseek_base_url: str = "https://api.deepseek.com"

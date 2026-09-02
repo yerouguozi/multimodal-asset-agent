@@ -8,10 +8,14 @@ from __future__ import annotations
 import base64
 import io
 import logging
+import re
+import shutil
+import subprocess
+from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageDraw
 
 import imagehash
 
@@ -40,6 +44,91 @@ class ProcessingResult:
     duration: float | None = None
 
 
+# ---------- 通用工具 ----------
+
+def _ffmpeg() -> str:
+    import imageio_ffmpeg
+
+    return imageio_ffmpeg.get_ffmpeg_exe()
+
+
+def _run(cmd: list[str], timeout: int = 120) -> subprocess.CompletedProcess:
+    return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+
+
+def _image_to_b64(img: Image.Image, max_side: int = MAX_VISION_SIDE) -> str:
+    probe = img.copy()
+    probe.thumbnail((max_side, max_side))
+    buf = io.BytesIO()
+    probe.convert("RGB").save(buf, "JPEG", quality=85)
+    return base64.b64encode(buf.getvalue()).decode("ascii")
+
+
+def _media_duration(path: Path) -> float | None:
+    """用 ffmpeg -i 的 stderr 解析时长（ffprobe 未随包分发）。"""
+    try:
+        r = _run([_ffmpeg(), "-i", str(path)])
+        m = re.search(r"Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)", r.stderr or "")
+        if m:
+            return int(m.group(1)) * 3600 + int(m.group(2)) * 60 + float(m.group(3))
+    except Exception as e:
+        logger.warning("解析时长失败 %s: %s", path.name, e)
+    return None
+
+
+def _extract_keyframes(src: Path, out_dir: Path, max_frames: int, duration: float | None) -> list[Path]:
+    """均匀抽帧：按时长把 max_frames 张关键帧均匀铺开。"""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    vf = f"fps=1/{max(0.1, duration / max_frames):.2f}" if duration else "fps=1/2"
+    _run([_ffmpeg(), "-y", "-i", str(src), "-vf", vf, "-frames:v", str(max_frames), str(out_dir / "f_%02d.jpg")])
+    return sorted(out_dir.glob("f_*.jpg"))
+
+
+def _extract_audio(src: Path, out_wav: Path, max_seconds: int | None) -> Path | None:
+    """抽音轨转 16kHz 单声道 wav（ASR 标准输入）；可限制时长控制成本。"""
+    out_wav.parent.mkdir(parents=True, exist_ok=True)
+    cmd = [_ffmpeg(), "-y", "-i", str(src), "-vn", "-acodec", "pcm_s16le", "-ar", "16000", "-ac", "1"]
+    if max_seconds:
+        cmd += ["-t", str(max_seconds)]
+    cmd.append(str(out_wav))
+    _run(cmd)
+    return out_wav if out_wav.exists() and out_wav.stat().st_size > 0 else None
+
+
+def _first_frame(src: Path, thumb_path: Path) -> Path | None:
+    """视频封面：优先取第 1 秒，失败退回第 0 帧。"""
+    thumb_path.parent.mkdir(parents=True, exist_ok=True)
+    _run([_ffmpeg(), "-y", "-ss", "1", "-i", str(src), "-frames:v", "1", "-q:v", "3", str(thumb_path)])
+    if not thumb_path.exists():
+        _run([_ffmpeg(), "-y", "-i", str(src), "-frames:v", "1", "-q:v", "3", str(thumb_path)])
+    return thumb_path if thumb_path.exists() else None
+
+
+def _audio_placeholder(thumb_path: Path) -> Path:
+    """音频没有画面，生成一个带 AUDIO 字样的占位缩略图。"""
+    thumb_path.parent.mkdir(parents=True, exist_ok=True)
+    img = Image.new("RGB", (320, 180), (30, 41, 59))
+    draw = ImageDraw.Draw(img)
+    text = "AUDIO"
+    try:
+        bbox = draw.textbbox((0, 0), text)
+        tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+    except Exception:
+        tw, th = 80, 20
+    draw.text(((320 - tw) / 2, (180 - th) / 2), text, fill=(148, 163, 184))
+    img.save(thumb_path, "JPEG", quality=80)
+    return thumb_path
+
+
+def _top_tags(tags: list[str], limit: int = 10) -> list[str]:
+    return [t for t, _ in Counter(tags).most_common(limit)]
+
+
+def _dedupe_join(items: list[str], sep: str = "；", limit: int = 1000) -> str | None:
+    merged = sep.join(dict.fromkeys(x for x in items if x))
+    return merged[:limit] or None
+
+
 # ---------- 图片 ----------
 
 def process_image(asset: Asset, llm: MultimodalClient, data_root: Path) -> ProcessingResult:
@@ -51,21 +140,15 @@ def process_image(asset: Asset, llm: MultimodalClient, data_root: Path) -> Proce
         result.width, result.height = img.size
         result.phash = str(imagehash.phash(img, hash_size=16))
 
-        # 缩略图
-        thumb = img.copy()
-        thumb.thumbnail((MAX_THUMB_SIDE, MAX_THUMB_SIDE))
         thumb_dir = data_root / "thumbnails"
         thumb_dir.mkdir(parents=True, exist_ok=True)
+        thumb = img.copy()
+        thumb.thumbnail((MAX_THUMB_SIDE, MAX_THUMB_SIDE))
         thumb_path = thumb_dir / f"{asset.id}.jpg"
         thumb.convert("RGB").save(thumb_path, "JPEG", quality=80)
         result.thumbnail_path = f"thumbnails/{thumb_path.name}"
 
-        # 视觉理解（先压缩到上限边长）
-        probe = img.copy()
-        probe.thumbnail((MAX_VISION_SIDE, MAX_VISION_SIDE))
-        buf = io.BytesIO()
-        probe.convert("RGB").save(buf, "JPEG", quality=85)
-        b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+        b64 = _image_to_b64(img)
 
     vision = llm.vision_describe(b64, "image/jpeg")
     if vision:
@@ -88,8 +171,6 @@ def process_document(asset: Asset, llm: MultimodalClient, data_root: Path) -> Pr
         if summary:
             result.description = summary.summary
             result.tags = summary.tags
-        else:
-            result.description = None  # 无 Key 时不编造
     else:
         result.description = "（未提取到文本，可能是扫描件；OCR 支持将在后续阶段补充）"
     return result
@@ -143,14 +224,106 @@ def _extract_xlsx(path: Path) -> str:
     return "\n".join(lines).strip()
 
 
-# ---------- 视频 / 音频（阶段 2） ----------
+# ---------- 视频 ----------
 
 def process_video(asset: Asset, llm: MultimodalClient, data_root: Path) -> ProcessingResult:
-    raise NotImplementedError("视频处理将在阶段 2 上线")
+    src = data_root / asset.storage_path
+    work = data_root / "_work" / str(asset.id)
+    result = ProcessingResult()
 
+    try:
+        result.duration = _media_duration(src)
+
+        # 1) 封面（首帧）
+        thumb = _first_frame(src, data_root / "thumbnails" / f"{asset.id}.jpg")
+        if thumb:
+            result.thumbnail_path = f"thumbnails/{thumb.name}"
+
+        # 2) 关键帧 → 视觉理解（描述/标签/OCR）
+        frames = _extract_keyframes(src, work, settings.video_max_frames, result.duration)
+        descs: list[str] = []
+        tags: list[str] = []
+        ocrs: list[str] = []
+        for f in frames:
+            try:
+                with Image.open(f) as img:
+                    img.load()
+                    vision = llm.vision_describe(_image_to_b64(img), "image/jpeg")
+            except Exception as e:
+                logger.warning("关键帧理解失败 %s: %s", f.name, e)
+                continue
+            if vision:
+                if vision.description:
+                    descs.append(vision.description)
+                tags.extend(vision.tags)
+                if vision.ocr:
+                    ocrs.append(vision.ocr)
+        result.description = _dedupe_join(descs)
+        result.tags = _top_tags(tags)
+        result.ocr_text = _dedupe_join(ocrs, sep="\n", limit=2000)
+
+        # 3) 音轨 → 转写（无音轨/失败则跳过）
+        wav = _extract_audio(src, work / "audio.wav", settings.audio_max_seconds)
+        if wav:
+            transcript = llm.transcribe_audio(wav)
+            if transcript:
+                result.transcript = transcript.strip()
+
+        # 4) 若视觉理解为空，用转写生成摘要兜底
+        if not result.description and result.transcript:
+            summary = llm.summarize_text(result.transcript[:3000])
+            if summary:
+                result.description = summary.summary
+                result.tags = summary.tags
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+        try:
+            work.parent.rmdir()  # 若 _work 已空则顺手删除
+        except OSError:
+            pass
+
+    if not result.description and not result.transcript:
+        result.description = "（视频理解未启用或失败，仅保留封面与元数据）"
+    return result
+
+
+# ---------- 音频 ----------
 
 def process_audio(asset: Asset, llm: MultimodalClient, data_root: Path) -> ProcessingResult:
-    raise NotImplementedError("音频处理将在阶段 2 上线")
+    src = data_root / asset.storage_path
+    work = data_root / "_work" / str(asset.id)
+    result = ProcessingResult()
+
+    try:
+        result.duration = _media_duration(src)
+
+        # 1) 占位缩略图
+        thumb = _audio_placeholder(data_root / "thumbnails" / f"{asset.id}.jpg")
+        result.thumbnail_path = f"thumbnails/{thumb.name}"
+
+        # 2) 转写（转 16k 单声道，限制时长控成本）
+        wav = _extract_audio(src, work / "audio.wav", settings.audio_max_seconds)
+        if wav:
+            transcript = llm.transcribe_audio(wav)
+            if transcript:
+                result.transcript = transcript.strip()
+
+        # 3) 摘要 + 标签
+        if result.transcript:
+            summary = llm.summarize_text(result.transcript[:3000])
+            if summary:
+                result.description = summary.summary
+                result.tags = summary.tags
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+        try:
+            work.parent.rmdir()  # 若 _work 已空则顺手删除
+        except OSError:
+            pass
+
+    if not result.description:
+        result.description = "（音频转写未启用或失败，仅保留元数据）"
+    return result
 
 
 _PROCESSORS = {
