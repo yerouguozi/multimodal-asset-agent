@@ -25,8 +25,22 @@ FastAPI · SQLAlchemy · SQLite · LangGraph · SiliconFlow（多模态）· Dee
 
 ## 开发进度
 
-见 [docs/04-开发计划.md](docs/04-开发计划.md)，当前阶段：0（骨架与文档）。
+见 [docs/04-开发计划.md](docs/04-开发计划.md)，当前阶段：1（资产模型 + 上传 + 图片/文档理解管线）已完成。
 
 ## 快速开始
 
-待阶段 1 完成后补充。
+### 1. 后端
+
+`powershell
+cd backend
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+Copy-Item .env.example .env   # 可选：填入 SILICONFLOW_API_KEY / DEEPSEEK_API_KEY
+.\.venv\Scripts\python -m uvicorn app.main:app --reload --port 8000
+`
+
+打开 <http://127.0.0.1:8000> 使用内置演示页；接口文档 <http://127.0.0.1:8000/docs>。
+
+> 不填 API Key 也能跑：图片/文档自动入库、缩略图、去重、关键词检索照常工作；
+> 填入 Key 后自动启用视觉理解打标、文档摘要和语义检索。

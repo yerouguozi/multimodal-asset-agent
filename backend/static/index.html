@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Multimodal Asset Agent · 阶段1演示</title>
+<style>
+  body { font-family: "Microsoft YaHei", system-ui, sans-serif; margin: 0; background: #0f172a; color: #e2e8f0; }
+  header { padding: 18px 28px; background: #1e293b; border-bottom: 1px solid #334155; }
+  h1 { font-size: 18px; margin: 0; }
+  h1 small { color: #94a3b8; font-weight: normal; margin-left: 12px; }
+  main { max-width: 1080px; margin: 24px auto; padding: 0 20px; }
+  .row { display: flex; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
+  input[type=text] { flex: 1; min-width: 220px; padding: 10px 14px; border-radius: 8px; border: 1px solid #334155; background: #1e293b; color: #e2e8f0; }
+  button { padding: 10px 18px; border: 0; border-radius: 8px; background: #3b82f6; color: #fff; cursor: pointer; }
+  button:hover { background: #2563eb; }
+  .card { background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 14px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; }
+  .item img { width: 100%; height: 140px; object-fit: cover; border-radius: 6px; background: #0f172a; }
+  .item .name { font-size: 13px; margin: 8px 0 4px; word-break: break-all; }
+  .item .desc { font-size: 12px; color: #94a3b8; min-height: 36px; }
+  .badge { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 999px; background: #334155; margin: 2px 4px 2px 0; }
+  .tag { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 999px; background: #0e7490; margin: 2px 4px 2px 0; }
+  .status { font-size: 11px; color: #fbbf24; }
+  #notice { color: #f87171; font-size: 13px; margin: 8px 0; }
+</style>
+</head>
+<body>
+<header><h1>Multimodal Asset Agent <small>阶段 1 · 图片/文档自动入库与检索演示</small></h1></header>
+<main>
+  <div class="card">
+    <div class="row">
+      <input type="file" id="file" multiple>
+      <button onclick="upload()">上传</button>
+      <input type="text" id="q" placeholder="自然语言搜索，如：夜景 / 营销方案 / 雾霾">
+      <button onclick="doSearch()">搜索</button>
+      <button onclick="loadAll()">全部素材</button>
+    </div>
+    <div id="notice"></div>
+  </div>
+  <div id="grid" class="grid" style="margin-top:18px;"></div>
+</main>
+<script>
+async function upload() {
+  const files = document.getElementById("file").files;
+  if (!files.length) return;
+  const fd = new FormData();
+  for (const f of files) fd.append("files", f);
+  const r = await fetch("/api/upload", { method: "POST", body: fd });
+  const data = await r.json();
+  const msgs = data.items.map(it => {
+    if (it.error) return "失败: " + it.error;
+    if (it.duplicate_of) return "重复素材，已指向 #" + it.duplicate_of;
+    return "已入库 #" + it.asset.id + "（" + it.asset.status + "）";
+  });
+  document.getElementById("notice").textContent = msgs.join("；");
+  loadAll();
+}
+async function loadAll() { render(await (await fetch("/api/assets?page_size=50")).json()); }
+async function doSearch() {
+  const q = document.getElementById("q").value.trim();
+  if (!q) return loadAll();
+  const r = await fetch("/api/search?q=" + encodeURIComponent(q));
+  const data = await r.json();
+  if (!data.hits.length) { document.getElementById("notice").textContent = "没有找到相关素材"; }
+  document.getElementById("grid").innerHTML = data.hits.map(hit => card(hit.asset, hit.score)).join("");
+}
+function card(a, score) {
+  const img = a.thumbnail_url ? '<img src="' + a.thumbnail_url + '">' : '<div style="height:140px;background:#0f172a;border-radius:6px"></div>';
+  const tags = (a.tags || []).map(t => '<span class="tag">' + t.name + '</span>').join("");
+  return '<div class="card item">' + img +
+    '<div class="name">#' + a.id + ' ' + a.name + ' <span class="badge">' + a.modality + '</span></div>' +
+    '<div class="desc">' + (a.description || "") + '</div>' + tags +
+    '<div class="status">' + (score !== undefined ? "score " + score.toFixed(3) + " · " : "") + a.status + '</div></div>';
+}
+function render(data) { document.getElementById("grid").innerHTML = (data.items || []).map(a => card(a)).join(""); }
+loadAll();
+</script>
+</body>
+</html>
