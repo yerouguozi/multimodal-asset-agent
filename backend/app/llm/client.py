@@ -219,7 +219,35 @@ class MultimodalClient:
         message = (data.get("choices") or [{}])[0].get("message", {})
         content = message.get("content", "") or message.get("reasoning_content", "") or ""
         return content.strip() or None
-    # ---------- 文生图 ----------
+    # ---------- 多模态 embedding ----------
+
+    def _embed(self, input, model: str) -> list[list[float]] | None:
+        if not self.settings.siliconflow_api_key:
+            return None
+        try:
+            data = self._post(
+                f"{self.settings.siliconflow_base_url}/embeddings",
+                {"model": model, "input": input},
+                {"Authorization": f"Bearer {self.settings.siliconflow_api_key}"},
+            )
+        except Exception as e:
+            logger.warning("embedding 失败（模型 %s）: %s", model, e)
+            return None
+        return [d["embedding"] for d in data.get("data", [])]
+
+    def embed_texts_vl(self, texts: list[str]) -> list[list[float]] | None:
+        """用多模态 embedding 模型嵌入文本查询，与图片向量同一空间。"""
+        if not self.settings.vl_embed_enabled:
+            return None
+        return self._embed(texts, self.settings.vl_embedding_model)
+
+    def embed_image(self, image_b64: str, mime: str = "image/jpeg") -> list[float] | None:
+        """用多模态 embedding 模型嵌入图片（data URL 输入）。"""
+        if not self.settings.vl_embed_enabled:
+            return None
+        vecs = self._embed(f"data:{mime};base64,{image_b64}", self.settings.vl_embedding_model)
+        return vecs[0] if vecs else None
+
 
     def generate_image(self, prompt: str) -> bytes | None:
         """SiliconFlow /images/generations：返回图片二进制；失败降级返回 None。"""

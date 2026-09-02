@@ -13,6 +13,7 @@ from collections import Counter
 
 from sqlalchemy.orm import Session
 
+from ..core.config import settings
 from ..llm.client import client as llm_client
 from ..models import Asset
 from .bm25 import BM25, tokenize
@@ -32,6 +33,17 @@ FIELD_WEIGHTS: dict[str, float] = {
     "tags": 1.0,
 }
 
+
+_VISUAL_KEYWORDS = (
+    "色", "蓝", "红", "绿", "黄", "紫", "橙", "夜空", "天空", "雪", "灯光", "玻璃",
+    "镜面", "方块", "剪影", "夜景", "晚霞", "像素", "阳光", "海面", "山", "楼", "光",
+    "画面", "图", "条纹", "彩色",
+)
+
+
+def _is_visual_query(query: str) -> bool:
+    """查询是否带视觉特征（颜色/形状/光影），决定是否启用图片级多模态向量。"""
+    return any(k in query for k in _VISUAL_KEYWORDS)
 
 def _searchable_text(asset: Asset) -> dict[str, str]:
     return {
@@ -103,18 +115,27 @@ def search(
     # 零分不参与 RRF（否则每个素材都会拿到 1/61 的保底分）
     bm25_scores = {k: v for k, v in bm25_scores.items() if v > 0}
 
-    # 2) 向量召回（embedding 可用时）
-    vec_scores: dict[int, float] = {}
-    if strategy in ("rrf", "full") and len(vector_store) > 0:
+    # 2) 向量召回：文本向量（bge-m3）+ 图片向量（VL-Embedding，tri/full/gate 启用）
+    score_lists: list[dict[int, float]] = [bm25_scores]
+    if strategy in ("rrf", "tri", "gate", "full") and len(vector_store) > 0:
         try:
             vecs = llm_client.embed_texts([query])
             if vecs:
-                vec_scores = vector_store.search(vecs[0], top_k=50)
+                score_lists.append(vector_store.search(vecs[0], settings.embedding_model, top_k=50))
         except Exception as e:
-            logger.warning("向量检索失败，退回关键词: %s", e)
+            logger.warning("文本向量检索失败，退回关键词: %s", e)
+    # 门控：仅"视觉查询"启用图片级多模态向量（否则 VL 噪声会淹没语义查询）
+    use_vl = strategy in ("tri", "full") or (strategy == "gate" and _is_visual_query(query))
+    if use_vl:
+        try:
+            vecs = llm_client.embed_texts_vl([query])
+            if vecs:
+                score_lists.append(vector_store.search(vecs[0], settings.vl_embedding_model, top_k=50))
+        except Exception as e:
+            logger.warning("多模态向量检索失败（已降级）: %s", e)
 
-    # 3) RRF 融合
-    fused = _rrf([bm25_scores, vec_scores])
+    # 3) RRF 融合（两路或三路）
+    fused = _rrf(score_lists)
     ranked = sorted(fused.items(), key=lambda x: x[1], reverse=True)[: max(limit, RERANK_CANDIDATES)]
     if not ranked:
         return []

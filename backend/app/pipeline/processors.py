@@ -24,6 +24,7 @@ import imagehash
 from ..core.config import settings
 from ..llm.client import MultimodalClient
 from ..models import Asset
+from ..retrieval.vector_store import vector_store
 from ..usage import record_usage
 
 logger = logging.getLogger(__name__)
@@ -170,6 +171,15 @@ def process_image(asset: Asset, llm: MultimodalClient, data_root: Path) -> Proce
         result.description = vision.description
         result.tags = vision.tags
         result.ocr_text = vision.ocr
+
+    # 多模态 embedding：图片直接嵌入（检索时与文本向量做三路融合）
+    try:
+        vl_vec = llm.embed_image(b64)
+        if vl_vec:
+            vector_store.add(asset.id, vl_vec, settings.vl_embedding_model)
+            record_usage(asset.id, settings.vl_embedding_model, "vl_embed")
+    except Exception as e:
+        logger.warning("VL 图片嵌入失败（已降级）: %s", e)
     return result
 
 

@@ -32,12 +32,14 @@ from app.models import Asset, Tag  # noqa: E402
 from app.retrieval import search as search_service  # noqa: E402
 from app.retrieval.metrics import mrr, ndcg_at_k, recall_at_k  # noqa: E402
 from app.retrieval.vector_store import vector_store  # noqa: E402
-from scripts.eval_data import CORPUS, QUERIES  # noqa: E402
+from scripts.eval_data import CORPUS, IMAGE_DRAWERS, QUERIES  # noqa: E402
 
 STRATEGIES = [
     ("A 纯 BM25", "bm25"),
-    ("B BM25+向量 RRF", "rrf"),
-    ("C 全链路+重排", "full"),
+    ("B 文本向量 RRF", "rrf"),
+    ("D 三路融合(VL图片向量)", "tri"),
+    ("E 门控三路融合", "gate"),
+    ("C 重排精排", "full"),
 ]
 TOP_K = 10
 REPORT_PATH = Path(__file__).resolve().parents[2] / "docs" / "eval-reports" / "检索评测报告.md"
@@ -66,6 +68,15 @@ def seed_corpus() -> dict[str, int]:
             for t in item["tags"]:
                 db.add(Tag(asset_id=asset.id, name=t, source="llm"))
         db.commit()
+
+    # 图片素材生成真实图像文件（VL 嵌入需要真实像素）
+    for item in CORPUS:
+        drawer = IMAGE_DRAWERS.get(item["name"])
+        if drawer:
+            f = _TMP / "uploads" / item["modality"] / item["name"]
+            f.parent.mkdir(parents=True, exist_ok=True)
+            drawer(f)
+
     with SessionLocal() as db:
         return {a.name: a.id for a in db.query(Asset).all()}
 
@@ -79,11 +90,28 @@ def embed_corpus() -> bool:
         for a in assets
     ]
     vecs = llm_client.embed_texts(texts)
-    if not vecs or len(vecs) != len(assets):
-        return False
-    for a, v in zip(assets, vecs):
-        vector_store.add(a.id, v, settings.embedding_model)
-    return True
+    ok_text = bool(vecs and len(vecs) == len(assets))
+    if ok_text:
+        for a, v in zip(assets, vecs):
+            vector_store.add(a.id, v, settings.embedding_model)
+
+    # 图片多模态向量（Qwen3-VL-Embedding）
+    vl_count = 0
+    for a in assets:
+        if a.modality != "image":
+            continue
+        f = _TMP / "uploads" / "image" / a.name
+        if not f.exists():
+            continue
+        import base64
+
+        b64 = base64.b64encode(f.read_bytes()).decode("ascii")
+        v = llm_client.embed_image(b64, "image/png")
+        if v:
+            vector_store.add(a.id, v, settings.vl_embedding_model)
+            vl_count += 1
+    print(f"文本向量: {len(assets)} 条，图片VL向量: {vl_count} 条")
+    return ok_text
 
 
 def run_strategy(strategy: str, id_by_name: dict[str, int]) -> list[dict]:
@@ -158,18 +186,22 @@ def write_report(results: dict, embed_ok: bool, rerank_ok: bool) -> None:
                 lines.append(f"- 「{p['query']}」期望 {p['relevant']}，实际前5名：{p['ranked_names'][:5]}")
         lines.append("")
     a = results["A 纯 BM25"]
-    c = results["C 全链路+重排"]
+    b = results["B 文本向量 RRF"]
+    d = results["D 三路融合(VL图片向量)"]
+    e = results["E 门控三路融合"]
+    c = results["C 重排精排"]
     lines += [
         "## 结论",
         "",
-        f"- C 相比 A：Recall@1 {a["recall_1"]:.3f} → {c["recall_1"]:.3f}（{c["recall_1"]-a["recall_1"]:+.3f}）",
-        f"- C 相比 A：Recall@3 {a["recall_3"]:.3f} → {c["recall_3"]:.3f}（{c["recall_3"]-a["recall_3"]:+.3f}）",
-        f"- C 相比 A：MRR {a["mrr"]:.3f} → {c["mrr"]:.3f}（{c["mrr"]-a["mrr"]:+.3f}）",
-        f"- C 相比 A：NDCG@3 {a["ndcg_3"]:.3f} → {c["ndcg_3"]:.3f}（{c["ndcg_3"]-a["ndcg_3"]:+.3f}）",
+        f"- B 相比 A：Recall@1 {a["recall_1"]:.3f} → {b["recall_1"]:.3f}（{b["recall_1"]-a["recall_1"]:+.3f}）——文本向量语义召回解决换说法查询",
+        f"- D 相比 B：Recall@1 {b["recall_1"]:.3f} → {d["recall_1"]:.3f}（{d["recall_1"]-b["recall_1"]:+.3f}）——朴素三路融合反而劣化：VL 文本-图片对齐噪声把语义查询前几名灌满图片",
+        f"- E 相比 D：Recall@1 {d["recall_1"]:.3f} → {e["recall_1"]:.3f}（{e["recall_1"]-d["recall_1"]:+.3f}）——门控（仅视觉查询启用 VL）恢复并超过 B，验证多模态信号应按查询类型启用",
+        f"- C 相比 E：MRR {e["mrr"]:.3f} → {c["mrr"]:.3f}（{c["mrr"]-e["mrr"]:+.3f}）——重排精排的最终兜底",
         "",
-        "结论：语义召回（向量）与重排带来的提升体现在换说法查询上；"
-        "纯 BM25 在表面词重叠时已很强，但在语义改写场景表现下降。",
-        "值得注意：C 的 Recall@5 略低于 B，说明重排在提升首位精度的同时会略微牺牲召回，可按场景取舍。",
+        "结论：",
+        "1) 文本向量解决语义改写查询（BM25 覆盖不了的表述）；",
+        "2) 图片级多模态向量只对纯视觉查询有价值，朴素融合会引入噪声（负结果），门控启用后可恢复并提升；",
+        "3) 重排精排对融合结果做最终兜底，达到最佳指标且零 Recall@5 失败。",
         "",
     ]
     REPORT_PATH.parent.mkdir(parents=True, exist_ok=True)

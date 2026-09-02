@@ -84,3 +84,141 @@ QUERIES: list[dict] = [
     {"query": "量子物理", "relevant": []},
     {"query": "汽车报价", "relevant": []},
 ]
+
+# ---------- 视觉评测扩展（深度二期） ----------
+
+# 纯视觉查询：与素材描述/标签无表面词重叠，只有"看懂图片"才能命中
+VISUAL_QUERIES: list[dict] = [
+    {"query": "深蓝色夜空下高楼的剪影", "relevant": ["城市夜景.jpg"]},
+    {"query": "橙色天空与深蓝海面的交界", "relevant": ["海边日落.png"]},
+    {"query": "皑皑白雪覆盖的尖峰", "relevant": ["雪山风景.jpg"]},
+    {"query": "镜面高楼在阳光下", "relevant": ["科技大楼.jpg"]},
+    {"query": "红黄蓝绿的方块阵列", "relevant": ["复古游戏机.png"]},
+    {"query": "暖色灯光下的食物近景", "relevant": ["美食摄影.jpg"]},
+]
+
+QUERIES = QUERIES + VISUAL_QUERIES
+
+
+def _draw_night(p) -> None:
+    import random
+
+    from PIL import Image, ImageDraw
+
+    rnd = random.Random(42)
+    img = Image.new("RGB", (320, 240), (10, 15, 40))
+    d = ImageDraw.Draw(img)
+    for _ in range(8):
+        x = rnd.randint(0, 280)
+        w = rnd.randint(30, 70)
+        h = rnd.randint(60, 180)
+        d.rectangle([x, 240 - h, x + w, 240], fill=(20, 25, 55))
+        for _ in range(rnd.randint(2, 5)):
+            wx = x + rnd.randint(2, max(2, w - 6))
+            wy = 240 - rnd.randint(5, h - 5)
+            d.rectangle([wx, wy, wx + 3, wy + 3], fill=(255, 220, 90))
+    img.save(p, "PNG")
+
+
+def _draw_sunset(p) -> None:
+    from PIL import Image, ImageDraw
+
+    img = Image.new("RGB", (320, 240), (255, 120, 40))
+    d = ImageDraw.Draw(img)
+    for y in range(120):
+        t = y / 120
+        d.line([(0, y), (320, y)], fill=(int(255 - 60 * t), int(120 + 60 * t), int(40 + 120 * t)))
+    d.ellipse([120, 30, 200, 110], fill=(255, 230, 150))
+    d.rectangle([0, 120, 320, 240], fill=(40, 60, 110))
+    for i in range(8):
+        d.line([(0, 125 + i * 14), (320, 125 + i * 14)], fill=(90, 110, 160), width=2)
+    img.save(p, "PNG")
+
+
+def _draw_snow(p) -> None:
+    from PIL import Image, ImageDraw
+
+    img = Image.new("RGB", (320, 240), (135, 190, 230))
+    d = ImageDraw.Draw(img)
+    d.polygon([(30, 240), (160, 40), (290, 240)], fill=(250, 250, 255))
+    d.polygon([(130, 240), (220, 90), (310, 240)], fill=(240, 245, 250))
+    d.rectangle([0, 200, 320, 240], fill=(70, 120, 70))
+    img.save(p, "PNG")
+
+
+def _draw_poster(p) -> None:
+    from PIL import Image, ImageDraw
+
+    img = Image.new("RGB", (320, 240), (250, 240, 220))
+    d = ImageDraw.Draw(img)
+    d.rectangle([40, 60, 180, 190], fill=(60, 90, 200))
+    d.rectangle([60, 90, 160, 130], fill=(230, 230, 235))
+    d.rectangle([40, 200, 280, 220], fill=(220, 60, 60))
+    img.save(p, "PNG")
+
+
+def _draw_food(p) -> None:
+    from PIL import Image, ImageDraw
+
+    img = Image.new("RGB", (320, 240), (80, 50, 30))
+    d = ImageDraw.Draw(img)
+    d.ellipse([70, 50, 250, 190], fill=(230, 230, 220))
+    d.ellipse([110, 90, 210, 160], fill=(180, 60, 40))
+    d.ellipse([140, 110, 190, 145], fill=(240, 200, 120))
+    for x, y in [(100, 80), (220, 120), (130, 170)]:
+        d.ellipse([x, y, x + 20, y + 20], fill=(60, 120, 60))
+    img.save(p, "PNG")
+
+
+def _draw_tech(p) -> None:
+    from PIL import Image, ImageDraw
+
+    img = Image.new("RGB", (320, 240), (150, 170, 200))
+    d = ImageDraw.Draw(img)
+    d.rectangle([60, 30, 150, 240], fill=(70, 90, 120))
+    d.rectangle([170, 70, 260, 240], fill=(90, 110, 140))
+    for i in range(6):
+        d.line([(70 + i * 13, 40), (70 + i * 13, 230)], fill=(140, 160, 190), width=3)
+    d.rectangle([0, 210, 320, 240], fill=(40, 55, 75))
+    img.save(p, "PNG")
+
+
+def _draw_retro(p) -> None:
+    import random
+
+    from PIL import Image, ImageDraw
+
+    rnd = random.Random(7)
+    img = Image.new("RGB", (320, 240), (10, 10, 20))
+    d = ImageDraw.Draw(img)
+    colors = [(255, 60, 60), (255, 220, 60), (60, 220, 90), (60, 120, 255), (220, 90, 255)]
+    for y in range(0, 240, 16):
+        for x in range(0, 320, 16):
+            if rnd.random() < 0.45:
+                d.rectangle([x, y, x + 14, y + 14], fill=rnd.choice(colors))
+    img.save(p, "PNG")
+
+
+def _draw_portrait(p) -> None:
+    from PIL import Image, ImageDraw
+
+    img = Image.new("RGB", (320, 240), (220, 200, 180))
+    d = ImageDraw.Draw(img)
+    d.ellipse([110, 40, 210, 190], fill=(210, 170, 140))
+    d.rectangle([90, 40, 230, 110], fill=(70, 50, 40))
+    d.ellipse([140, 105, 160, 125], fill=(40, 30, 25))
+    d.ellipse([175, 105, 195, 125], fill=(40, 30, 25))
+    d.arc([135, 130, 190, 170], 20, 160, fill=(120, 60, 60), width=3)
+    img.save(p, "PNG")
+
+
+IMAGE_DRAWERS: dict[str, callable] = {
+    "城市夜景.jpg": _draw_night,
+    "海边日落.png": _draw_sunset,
+    "雪山风景.jpg": _draw_snow,
+    "产品海报.png": _draw_poster,
+    "美食摄影.jpg": _draw_food,
+    "科技大楼.jpg": _draw_tech,
+    "复古游戏机.png": _draw_retro,
+    "人物肖像.jpg": _draw_portrait,
+}

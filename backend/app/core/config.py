@@ -45,6 +45,10 @@ class Settings(BaseSettings):
     vision_model_pro: str = "Qwen/Qwen3-VL-32B-Instruct"
     simple_image_max_side: int = 640
 
+    # 多模态 embedding（图片直接嵌入，与文本嵌入同一向量空间做融合）
+    vl_embedding_model: str = "Qwen/Qwen3-VL-Embedding-8B"
+    vl_embed_enabled: bool = True
+
     # 文生图
     image_gen_model: str = "Qwen/Qwen-Image"
     image_gen_size: str = "1024x1024"

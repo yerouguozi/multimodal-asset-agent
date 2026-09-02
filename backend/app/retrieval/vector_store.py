@@ -1,11 +1,13 @@
-"""本地向量存储（numpy + npz 落盘）。
+"""本地向量存储（numpy + npz 落盘），按模型分空间。
 
-设计：VectorStore 是抽象能力，LocalVectorStore 是当前实现；
-阶段 3 检索升级时可无缝替换为 Milvus（同接口）。
+多模态二期：图片有 VL-Embedding（4096 维）、文本有 bge-m3（1024 维），
+不同模型向量维度不同，因此按 model 分空间存储与检索。
+VectorStore 仍是抽象能力，后续可换 Milvus（同接口）。
 """
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 
 import numpy as np
@@ -15,34 +17,43 @@ from ..core.config import settings
 logger = logging.getLogger(__name__)
 
 
+def _slug(model: str) -> str:
+    return re.sub(r"[^0-9A-Za-z]+", "_", model).strip("_")
+
+
 class LocalVectorStore:
     def __init__(self, path: Path) -> None:
         self.path = path
-        self._vectors: dict[int, np.ndarray] = {}
+        self._spaces: dict[str, dict[int, np.ndarray]] = {}
         self._load()
 
     def __len__(self) -> int:
-        return len(self._vectors)
+        return sum(len(s) for s in self._spaces.values())
+
+    def models(self) -> list[str]:
+        return list(self._spaces.keys())
 
     def add(self, asset_id: int, vector: list[float], model: str) -> None:
-        self._vectors[asset_id] = np.asarray(vector, dtype=np.float32)
-        self._save()
+        self._spaces.setdefault(model, {})[asset_id] = np.asarray(vector, dtype=np.float32)
+        self._save(model)
 
     def delete(self, asset_id: int) -> None:
-        if asset_id in self._vectors:
-            del self._vectors[asset_id]
-            self._save()
+        for space in self._spaces.values():
+            space.pop(asset_id, None)
+        self._save_all()
 
     def clear(self) -> None:
-        self._vectors.clear()
-        self._save()
+        self._spaces.clear()
+        for f in self.path.parent.glob(f"{self.path.stem}_*.npz"):
+            f.unlink(missing_ok=True)
 
-    def search(self, query_vec: list[float] | None, top_k: int = 20) -> dict[int, float]:
-        """余弦相似度检索，返回 {asset_id: sim}（仅保留 >0 的命中）。"""
-        if not self._vectors or query_vec is None:
+    def search(self, query_vec: list[float] | None, model: str, top_k: int = 20) -> dict[int, float]:
+        """指定模型空间内做余弦相似度检索，返回 {asset_id: sim}（仅保留 >0）。"""
+        space = self._spaces.get(model, {})
+        if not space or query_vec is None:
             return {}
-        ids = list(self._vectors.keys())
-        mat = np.stack(list(self._vectors.values()))
+        ids = list(space.keys())
+        mat = np.stack(list(space.values()))
         q = np.asarray(query_vec, dtype=np.float32)
         qn = q / (np.linalg.norm(q) + 1e-9)
         matn = mat / (np.linalg.norm(mat, axis=1, keepdims=True) + 1e-9)
@@ -52,26 +63,37 @@ class LocalVectorStore:
 
     # ---------- 持久化 ----------
 
-    def _save(self) -> None:
-        if not self._vectors:
-            self.path.unlink(missing_ok=True)
+    def _file_for(self, model: str) -> Path:
+        return self.path.parent / f"{self.path.stem}_{_slug(model)}.npz"
+
+    def _save(self, model: str) -> None:
+        space = self._spaces.get(model, {})
+        f = self._file_for(model)
+        if not space:
+            f.unlink(missing_ok=True)
             return
-        ids = np.array(list(self._vectors.keys()), dtype=np.int64)
-        mat = np.stack(list(self._vectors.values()))
-        # 注意：np.savez 会对不以 .npz 结尾的路径自动追加 .npz，临时文件必须以 .npz 结尾
-        tmp = self.path.parent / f"{self.path.stem}.tmp.npz"
-        np.savez(tmp, ids=ids, mat=mat)
-        tmp.replace(self.path)
+        ids = np.array(list(space.keys()), dtype=np.int64)
+        mat = np.stack(list(space.values()))
+        # np.savez 会对不以 .npz 结尾的路径自动追加 .npz，文件名必须以 .npz 结尾
+        tmp = f.with_name(f"{f.stem}.tmp.npz")
+        np.savez(tmp, ids=ids, mat=mat, model=np.array([model]))
+        tmp.replace(f)
+
+    def _save_all(self) -> None:
+        for model in list(self._spaces.keys()):
+            self._save(model)
 
     def _load(self) -> None:
-        if not self.path.exists():
-            return
-        try:
-            with np.load(self.path) as d:
-                for aid, vec in zip(d["ids"], d["mat"]):
-                    self._vectors[int(aid)] = vec.astype(np.float32)
-        except Exception as e:
-            logger.warning("向量库加载失败（按空库启动）: %s", e)
+        for f in self.path.parent.glob(f"{self.path.stem}_*.npz"):
+            try:
+                with np.load(f) as d:
+                    model = str(d["model"][0]) if "model" in d else f.stem[len(self.path.stem) + 1 :]
+                    self._spaces[model] = {
+                        int(aid): vec.astype(np.float32)
+                        for aid, vec in zip(d["ids"], d["mat"])
+                    }
+            except Exception as e:
+                logger.warning("向量库加载失败（文件 %s）: %s", f.name, e)
 
 
 vector_store = LocalVectorStore(settings.vector_store_file)
