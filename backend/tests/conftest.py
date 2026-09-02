@@ -25,9 +25,6 @@ def clean_state():
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
     vector_store.clear()
-    from app.api.chat import SESSION_MEMORY
-
-    SESSION_MEMORY.clear()
     yield
 
 

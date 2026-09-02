@@ -1,9 +1,4 @@
-"""兼容 agent-qc-platform CustomerServiceDriver 的评测接入接口。
-
-协议（见质控平台 app/eval/driver.py）：
-  POST /api/sessions  {"title": ...}         -> {"id": sid}
-  POST /api/sessions/{sid}/messages {"content": prompt} -> [{"content": 回答, "tool_calls": [...]}]
-"""
+"""兼容 agent-qc-platform CustomerServiceDriver 的评测接入接口（会话落库）。"""
 from __future__ import annotations
 
 import uuid
@@ -11,12 +6,12 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from ..core.database import SessionLocal
+from ..models import ChatSession
 from .auth import get_current_user
 from .chat import run_agent
 
 router = APIRouter(prefix="/api", tags=["qc"])
-
-_sessions: dict[str, dict] = {}
 
 
 class SessionCreate(BaseModel):
@@ -30,14 +25,17 @@ class MessageBody(BaseModel):
 @router.post("/sessions")
 def create_session(body: SessionCreate, user=Depends(get_current_user)):
     sid = f"qc-{uuid.uuid4().hex[:10]}"
-    _sessions[sid] = {"title": body.title}
+    with SessionLocal() as db:
+        db.add(ChatSession(id=sid, title=body.title))
+        db.commit()
     return {"id": sid}
 
 
 @router.post("/sessions/{sid}/messages")
 def send_message(sid: str, body: MessageBody, user=Depends(get_current_user)):
-    if sid not in _sessions:
-        raise HTTPException(404, "会话不存在")
+    with SessionLocal() as db:
+        if db.get(ChatSession, sid) is None:
+            raise HTTPException(404, "会话不存在")
     message = (body.content or "").strip()
     if not message:
         raise HTTPException(400, "消息不能为空")

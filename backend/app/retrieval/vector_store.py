@@ -96,4 +96,16 @@ class LocalVectorStore:
                 logger.warning("向量库加载失败（文件 %s）: %s", f.name, e)
 
 
-vector_store = LocalVectorStore(settings.vector_store_file)
+def create_vector_store():
+    """按配置选择后端：milvus（连接失败自动降级 local）。"""
+    if settings.vector_backend == "milvus":
+        try:
+            from .milvus_store import MilvusVectorStore
+
+            return MilvusVectorStore(settings.milvus_uri)
+        except Exception as e:
+            logger.warning("Milvus 不可用，降级本地向量库: %s", e)
+    return LocalVectorStore(settings.vector_store_file)
+
+
+vector_store = create_vector_store()

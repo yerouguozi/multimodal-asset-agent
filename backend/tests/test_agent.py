@@ -8,6 +8,11 @@ from app.agent.tools import domain_profile as tool_domain_profile
 from app.agent.tools import search_assets as tool_search_assets
 from app.llm.client import VisionResult, client as llm_client
 
+STATE = {
+    "plan": [], "step_index": 0, "results": [],
+    "tool_result": {}, "tool_used": None, "intent": "", "answer": "",
+}
+
 
 def upload_image(client, name):
     buf = io.BytesIO()
@@ -54,7 +59,7 @@ def test_agent_search_fallback(client, monkeypatch):
     seed_night_scene(client, monkeypatch)
     result = agent_app.invoke({
         "messages": [{"role": "user", "content": "帮我搜夜景"}],
-        "intent": "", "params": {}, "tool_result": {}, "answer": "",
+        **STATE,
     })
     assert result["intent"] == "search"
     assert "城市夜景" in result["answer"]
@@ -64,26 +69,26 @@ def test_agent_profile_fallback(client):
     client.post("/api/upload", files={"files": ("plan.txt", "营销内容".encode(), "text/plain")})
     result = agent_app.invoke({
         "messages": [{"role": "user", "content": "我的素材库是什么领域"}],
-        "intent": "", "params": {}, "tool_result": {}, "answer": "",
+        **STATE,
     })
     assert result["intent"] == "profile"
     assert "共" in result["answer"]
 
 
-def test_agent_llm_intent_and_answer(client, monkeypatch):
-    """mock LLM：意图识别 + 组织回答都走真实链路。"""
+def test_agent_llm_planner_and_answer(client, monkeypatch):
+    """mock LLM：任务规划 + 组织回答都走真实链路。"""
     seed_night_scene(client, monkeypatch)
 
     def fake_chat(messages, temperature=0.3, max_tokens=800):
         system = messages[0]["content"]
-        if "意图识别" in system:
-            return '{"intent": "search", "query": "夜景"}'
+        if "任务规划器" in system:
+            return '{"steps": [{"tool": "search_assets", "args": {"query": "夜景"}}]}'
         return "为你找到素材 #1 城市夜景。相关描述：城市夜景。"
 
     monkeypatch.setattr(llm_client, "chat", fake_chat)
     result = agent_app.invoke({
         "messages": [{"role": "user", "content": "帮我搜夜景"}],
-        "intent": "", "params": {}, "tool_result": {}, "answer": "",
+        **STATE,
     })
     assert result["intent"] == "search"
     assert result["answer"].startswith("为你找到素材")

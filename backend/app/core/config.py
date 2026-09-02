@@ -53,6 +53,14 @@ class Settings(BaseSettings):
     image_gen_model: str = "Qwen/Qwen-Image"
     image_gen_size: str = "1024x1024"
 
+    # 音视频时间戳分片转写
+    asr_chunk_seconds: int = 30
+    max_asr_chunks: int = 10
+
+    # 向量后端：local（默认，零依赖）| milvus（可选）
+    vector_backend: str = "local"
+    milvus_uri: str = "http://localhost:19530"
+
     # JWT（质控平台等外部评测接入）
     jwt_secret: str = "dev-secret-change-me-please-override-32bytes-min"
     jwt_expire_minutes: int = 1440

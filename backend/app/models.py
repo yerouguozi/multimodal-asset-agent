@@ -54,6 +54,7 @@ class Asset(Base):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     ocr_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     transcript: Mapped[str | None] = mapped_column(Text, nullable=True)
+    transcript_segments: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON: [{start,end,text}]
     text_content: Mapped[str | None] = mapped_column(Text, nullable=True)  # 文档正文（截断）
 
     width: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -98,6 +99,25 @@ class IngestionJob(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
 
+
+class ChatSession(Base):
+    """对话会话（记忆落库，重启不丢）。"""
+
+    __tablename__ = "chat_sessions"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    title: Mapped[str] = mapped_column(String(200), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class ChatMessage(Base):
+    __tablename__ = "chat_messages"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    session_id: Mapped[str] = mapped_column(ForeignKey("chat_sessions.id"), index=True)
+    role: Mapped[str] = mapped_column(String(20))
+    content: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 class User(Base):
     """极简用户（供外部评测/后续扩展接入）。"""

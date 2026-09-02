@@ -19,11 +19,26 @@ services:
       SILICONFLOW_BASE_URL: ${SILICONFLOW_BASE_URL:-https://api.siliconflow.cn/v1}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       JWT_SECRET: ${JWT_SECRET:-change-me-to-a-long-random-secret}
+      VECTOR_BACKEND: ${VECTOR_BACKEND:-local}
+      MILVUS_URI: http://milvus:19530
     volumes:
       - ./backend/data:/app/data
     ports:
       - "8000:8000"
     restart: unless-stopped
+
+  # 可选：docker compose --profile milvus up -d，再把 VECTOR_BACKEND=milvus 注入
+  milvus:
+    image: milvusdb/milvus:v2.4.13
+    profiles: ["milvus"]
+    command: ["milvus", "run", "standalone"]
+    environment:
+      ETCD_USE_EMBED: "true"
+      COMMON_STORAGETYPE: "local"
+    ports:
+      - "19530:19530"
+    volumes:
+      - ./backend/data/milvus:/var/lib/milvus
 
   frontend:
     build:

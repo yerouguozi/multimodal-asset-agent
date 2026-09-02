@@ -44,6 +44,8 @@ def _migrate_columns() -> None:
             cols = {c["name"] for c in inspect(engine).get_columns("assets")}
             if "vision_model" not in cols:
                 conn.execute(text("ALTER TABLE assets ADD COLUMN vision_model VARCHAR(120)"))
+            if "transcript_segments" not in cols:
+                conn.execute(text("ALTER TABLE assets ADD COLUMN transcript_segments TEXT"))
     except Exception:
         # 表不存在或已迁移，忽略
         pass

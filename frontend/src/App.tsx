@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { deleteAsset, fetchAssets, fetchDomainProfile, searchAssets, uploadFiles, fetchUsageSummary } from "./api";
+import { deleteAsset, fetchAssets, fetchDomainProfile, searchAssets, searchByImage, uploadFiles, fetchUsageSummary } from "./api";
 import type { Asset, DomainProfile, UsageSummary } from "./types";
 import AssetDetailModal from "./components/AssetDetailModal";
 import AssetGrid from "./components/AssetGrid";
@@ -74,6 +74,20 @@ export default function App() {
     void load();
   };
 
+  const handleImageSearch = async (file: File) => {
+    setBusy(true);
+    try {
+      const hits = await searchByImage(file);
+      setAssets(hits.map((h) => h.asset));
+      setTotal(hits.length);
+      notify(hits.length ? `以图搜图：找到 ${hits.length} 个相似素材` : "没有找到相似素材");
+    } catch (e) {
+      notify(`以图搜图失败：${errMsg(e)}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const handleUpload = async (files: File[]) => {
     if (!files.length) return;
     setBusy(true);
@@ -128,6 +142,7 @@ export default function App() {
             setTag={setTag}
             onSearch={handleSearch}
             onReset={handleReset}
+            onImageSearch={handleImageSearch}
           />
           <AssetGrid assets={assets} total={total} onOpen={setSelected} onDelete={handleDelete} />
         </section>

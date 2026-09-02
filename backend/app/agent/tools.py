@@ -16,6 +16,7 @@ TOOL_DESCRIPTIONS: list[dict] = [
     {"name": "domain_profile", "description": "获取素材库整体领域画像（模态分布/高频标签/总结）。", "params": {}},
     {"name": "generate_image", "description": "根据描述生成一张图片并自动入库。", "params": {"prompt": "画面描述"}},
     {"name": "transform_asset", "description": "处理已有素材（压缩/缩放/转格式），生成新版本入库。", "params": {"asset_id": "素材编号", "operation": "compress|resize|convert", "params": "参数"}},
+    {"name": "find_moment", "description": "在音频/视频的转写片段里定位关键词，返回时间戳（用于找\"说过某段话\"）。", "params": {"query": "关键词"}},
 ]
 
 
@@ -203,10 +204,41 @@ def transform_asset(asset_id: int, operation: str, params: dict | None = None) -
     return {"ok": True, "summary": f"已生成处理版本 #{new_id}", "assets": [brief]}
 
 
+def find_moment(query: str) -> dict:
+    """在音视频转写片段里定位关键词，返回时间戳列表。"""
+    import json as _json
+
+    with SessionLocal() as db:
+        assets = db.query(Asset).filter(Asset.status == "ready").all()
+        moments = []
+        for a in assets:
+            try:
+                segs = _json.loads(a.transcript_segments or "[]")
+            except Exception:
+                segs = []
+            for s in segs:
+                text = (s.get("text") or "")
+                if query and query in text:
+                    moments.append({
+                        "asset_id": a.id,
+                        "name": a.name,
+                        "start": s.get("start", 0),
+                        "end": s.get("end"),
+                        "snippet": text[:120],
+                    })
+    return {
+        "ok": bool(moments),
+        "summary": f"找到 {len(moments)} 处相关内容" if moments else "没有找到相关内容",
+        "moments": moments[:10],
+        "assets": [],
+    }
+
+
 TOOL_REGISTRY: dict[str, callable] = {
     "search_assets": search_assets,
     "get_asset_detail": get_asset_detail,
     "domain_profile": domain_profile,
     "generate_image": generate_image,
     "transform_asset": transform_asset,
+    "find_moment": find_moment,
 }

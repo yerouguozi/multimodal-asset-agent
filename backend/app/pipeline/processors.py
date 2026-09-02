@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import base64
 import io
+import json
 import logging
+import math
 import re
 import shutil
 import subprocess
@@ -40,6 +42,7 @@ class ProcessingResult:
     tags: list[str] = field(default_factory=list)
     ocr_text: str | None = None
     transcript: str | None = None
+    transcript_segments: str | None = None
     text_content: str | None = None
     thumbnail_path: str | None = None
     phash: str | None = None
@@ -95,6 +98,45 @@ def _extract_keyframes(src: Path, out_dir: Path, max_frames: int, duration: floa
     _run([_ffmpeg(), "-y", "-i", str(src), "-vf", vf, "-frames:v", str(max_frames), str(out_dir / "f_%02d.jpg")])
     return sorted(out_dir.glob("f_*.jpg"))
 
+
+def _slice_audio(src: Path, start: float, duration: float, out: Path) -> Path | None:
+    """切出 [start, start+duration) 的 16k 单声道 wav。"""
+    out.parent.mkdir(parents=True, exist_ok=True)
+    _run([_ffmpeg(), "-y", "-ss", f"{start:.2f}", "-t", f"{duration:.2f}", "-i", str(src),
+          "-acodec", "pcm_s16le", "-ar", "16000", "-ac", "1", str(out)])
+    return out if out.exists() and out.stat().st_size > 0 else None
+
+
+def _transcribe_segments(asset: Asset, llm: MultimodalClient, wav_path: Path, work_dir: Path, duration: float | None):
+    """整段或分片转写。返回 (全文, segments[{start,end,text}])，供"找说过某段话"使用。"""
+    chunk = settings.asr_chunk_seconds
+    if not duration or duration <= chunk:
+        text = llm.transcribe_audio(wav_path)
+        record_usage(asset.id, settings.asr_model, "asr")
+        if not text:
+            return None, None
+        text = text.strip()
+        return text, [{"start": 0, "end": round(duration or 0, 1), "text": text}]
+
+    n = min(int(math.ceil(duration / chunk)), settings.max_asr_chunks)
+    segments: list[dict] = []
+    parts: list[str] = []
+    for i in range(n):
+        start = i * chunk
+        seg = _slice_audio(wav_path, start, chunk, work_dir / f"seg_{i}.wav")
+        if not seg:
+            continue
+        text = llm.transcribe_audio(seg)
+        record_usage(asset.id, settings.asr_model, "asr")
+        if text and text.strip():
+            text = text.strip()
+            parts.append(text)
+            segments.append({
+                "start": round(start, 1),
+                "end": round(min(start + chunk, duration or start + chunk), 1),
+                "text": text,
+            })
+    return (" ".join(parts)) or None, segments
 
 def _extract_audio(src: Path, out_wav: Path, max_seconds: int | None) -> Path | None:
     """抽音轨转 16kHz 单声道 wav（ASR 标准输入）；可限制时长控制成本。"""
@@ -291,10 +333,10 @@ def process_video(asset: Asset, llm: MultimodalClient, data_root: Path) -> Proce
 
         wav = _extract_audio(src, work / "audio.wav", settings.audio_max_seconds)
         if wav:
-            transcript = llm.transcribe_audio(wav)
-            record_usage(asset.id, settings.asr_model, "asr")
+            transcript, segments = _transcribe_segments(asset, llm, wav, work, result.duration)
             if transcript:
-                result.transcript = transcript.strip()
+                result.transcript = transcript
+                result.transcript_segments = json.dumps(segments, ensure_ascii=False) if segments else None
 
         if not result.description and result.transcript:
             summary = llm.summarize_text(result.transcript[:3000])
@@ -329,10 +371,10 @@ def process_audio(asset: Asset, llm: MultimodalClient, data_root: Path) -> Proce
 
         wav = _extract_audio(src, work / "audio.wav", settings.audio_max_seconds)
         if wav:
-            transcript = llm.transcribe_audio(wav)
-            record_usage(asset.id, settings.asr_model, "asr")
+            transcript, segments = _transcribe_segments(asset, llm, wav, work, result.duration)
             if transcript:
-                result.transcript = transcript.strip()
+                result.transcript = transcript
+                result.transcript_segments = json.dumps(segments, ensure_ascii=False) if segments else None
 
         if result.transcript:
             summary = llm.summarize_text(result.transcript[:3000])

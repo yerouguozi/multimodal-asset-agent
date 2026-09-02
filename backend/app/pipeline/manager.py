@@ -138,6 +138,7 @@ class IngestionManager:
         asset.description = result.description
         asset.ocr_text = result.ocr_text
         asset.transcript = result.transcript
+        asset.transcript_segments = result.transcript_segments
         asset.text_content = result.text_content
         asset.width = result.width
         asset.height = result.height

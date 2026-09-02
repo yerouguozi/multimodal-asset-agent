@@ -12,7 +12,8 @@ LangGraph 素材助理 Agent 帮你搜素材、生成素材、处理素材、总
 - **多模态入库自动化**：四类素材一条异步流水线——SHA-256/pHash 去重、缩略图/封面、视觉理解（描述/标签/OCR）、音视频转写、文档摘要、统一向量化，失败自动重试
 - **跨模态语义检索**：自实现 BM25（jieba+二元组）+ bge-m3 向量，RRF(60) 融合，bge-reranker 精排；字段权重随素材分布自适应
 - **领域自适应**：分类体系不写死，标签聚合 + LLM 洞察自动生成"我的素材库是什么领域"
-- **素材助理 Agent**：LangGraph 意图识别 → 工具调用 → 组织回答，SSE 逐步推送；支持检索、详情、画像、文生图入库、素材处理（压缩/缩放/转格式）
+- **素材助理 Agent**：LangGraph 任务规划（LLM 结构化参数）→ 多步工具循环 → 组织回答，SSE 逐步推送；支持检索、详情、画像、文生图入库、素材处理、会话记忆落库
+- **进阶检索**：以图搜图（VL 图片向量）、音视频转写片段时间戳检索（"找我说过 XX 的那一段"）
 - **成本意识**：简单图片走 Qwen3-VL-8B、复杂走 32B 的模型路由；每次模型调用记入 UsageLog，前端实时显示估算成本
 - **可评测**：自建 24 素材/39 查询评测集，三种检索策略量化对比（见下方）
 
@@ -113,6 +114,8 @@ cd backend
 | GET | /api/assets | 素材列表/筛选 |
 | GET/PATCH/DELETE | /api/assets/{id} | 详情 / 改标签 / 删除 |
 | GET | /api/search?q= | 跨模态语义检索 |
+| POST | /api/search/image | 以图搜图（上传参考图） |
+| GET | /api/search/transcript | 音视频转写片段时间戳检索 |
 | GET | /api/domain/profile | 领域画像 |
 | POST | /api/chat | Agent 对话（SSE 逐步推送） |
 | GET | /api/usage/summary | 模型成本追踪 |

@@ -1,3 +1,5 @@
+import { useRef } from "react";
+
 interface Props {
   query: string;
   setQuery: (s: string) => void;
@@ -7,9 +9,13 @@ interface Props {
   setTag: (s: string) => void;
   onSearch: () => void;
   onReset: () => void;
+  onImageSearch: (f: File) => void;
 }
 
-export default function SearchBar({ query, setQuery, modality, setModality, tag, setTag, onSearch, onReset }: Props) {
+export default function SearchBar({
+  query, setQuery, modality, setModality, tag, setTag, onSearch, onReset, onImageSearch,
+}: Props) {
+  const imgRef = useRef<HTMLInputElement>(null);
   return (
     <section className="panel search-panel">
       <div className="row">
@@ -28,6 +34,20 @@ export default function SearchBar({ query, setQuery, modality, setModality, tag,
         <button className="btn ghost" onClick={onReset}>
           全部素材
         </button>
+        <button className="btn ghost" onClick={() => imgRef.current?.click()}>
+          以图搜图
+        </button>
+        <input
+          ref={imgRef}
+          type="file"
+          accept="image/*"
+          hidden
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) onImageSearch(f);
+            e.target.value = "";
+          }}
+        />
       </div>
       <div className="row">
         <select className="text-input" value={modality} onChange={(e) => setModality(e.target.value)}>

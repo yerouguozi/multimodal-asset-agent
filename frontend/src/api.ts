@@ -3,6 +3,7 @@ import type {
   AssetList,
   ChatEvent,
   DomainProfile,
+  SearchHit,
   SearchResponse,
   UploadItem,
   UsageSummary,
@@ -46,6 +47,14 @@ export function fetchAsset(id: number): Promise<Asset> {
 
 export function fetchDomainProfile(): Promise<DomainProfile> {
   return fetch("/api/domain/profile").then((r) => j<DomainProfile>(r));
+}
+
+export async function searchByImage(file: File): Promise<SearchHit[]> {
+  const fd = new FormData();
+  fd.append("file", file);
+  const r = await fetch("/api/search/image", { method: "POST", body: fd });
+  const data = await j<{ hits: SearchHit[] }>(r);
+  return data.hits;
 }
 
 export function fetchUsageSummary(): Promise<UsageSummary> {
