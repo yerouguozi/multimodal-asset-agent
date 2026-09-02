@@ -194,6 +194,30 @@ class MultimodalClient:
                 scores[idx] = float(r.get("relevance_score", 0.0))
         return scores
 
+    # ---------- 通用对话 ----------
+
+    def chat(self, messages: list[dict], temperature: float = 0.3, max_tokens: int = 800) -> str | None:
+        """通用对话补全（DeepSeek）。无 Key 或失败返回 None，供 Agent 走确定性兜底。"""
+        if not self.settings.deepseek_api_key:
+            return None
+        payload = {
+            "model": self.settings.llm_model,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+            "messages": messages,
+        }
+        try:
+            data = self._post(
+                f"{self.settings.deepseek_base_url}/chat/completions",
+                payload,
+                {"Authorization": f"Bearer {self.settings.deepseek_api_key}"},
+            )
+        except Exception as e:
+            logger.warning("chat 失败（已降级）: %s", e)
+            return None
+        message = (data.get("choices") or [{}])[0].get("message", {})
+        content = message.get("content", "") or message.get("reasoning_content", "") or ""
+        return content.strip() or None
     # ---------- 领域洞察 ----------
 
     def domain_insight(self, modality_summary: str, top_tags: list[str]) -> DomainInsight | None:

@@ -38,7 +38,14 @@
     </div>
     <div id="notice"></div>
   </div>
-  <div id="profile"></div>`n  <div id="grid" class="grid" style="margin-top:18px;"></div>
+  <div id="profile"></div>  <div class="card" style="margin-top:14px">
+    <b>素材助理 Agent</b>
+    <div id="chatbox" style="height:240px;overflow-y:auto;background:#0f172a;border-radius:8px;padding:10px;margin:10px 0;font-size:13px"></div>
+    <div class="row">
+      <input type="text" id="chatInput" placeholder="问我：帮我搜夜景 / 我的素材库是什么领域 / 看看 #1">
+      <button onclick="sendChat()">发送</button>
+    </div>
+  </div>`n  <div id="grid" class="grid" style="margin-top:18px;"></div>
 </main>
 <script>
 async function showProfile() {
@@ -54,7 +61,36 @@ async function showProfile() {
     (labels ? '<div>' + labels + '</div>' : '') +
     '<div style="margin-top:10px">' + bars + '</div>' +
     '<div style="font-size:11px;color:#64748b;margin-top:8px">自适应检索权重: ' + JSON.stringify(d.adaptive_weights) + '</div></div>';
-}async function upload() {
+}async function sendChat() {
+  const input = document.getElementById("chatInput");
+  const msg = input.value.trim();
+  if (!msg) return;
+  input.value = "";
+  const box = document.getElementById("chatbox");
+  box.innerHTML += '<div style="color:#93c5fd;margin:4px 0">你: ' + esc(msg) + '</div>';
+  const resp = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: msg }) });
+  const reader = resp.body.getReader();
+  const dec = new TextDecoder();
+  let buf = "";
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    const parts = buf.split("\n\n");
+    buf = parts.pop();
+    for (const part of parts) {
+      for (const line of part.split("\n")) {
+        if (!line.startsWith("data: ")) continue;
+        const d = JSON.parse(line.slice(6));
+        if (d.stage) box.innerHTML += '<div style="color:#64748b;margin:2px 0">→ ' + esc(d.content) + '</div>';
+        else if (d.text) box.innerHTML += '<div style="color:#e2e8f0;margin:6px 0;white-space:pre-wrap">AI: ' + esc(d.text) + '</div>';
+      }
+    }
+    box.scrollTop = box.scrollHeight;
+  }
+}
+function esc(s) { return s.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+document.getElementById("chatInput").addEventListener("keydown", e => { if (e.key === "Enter") sendChat(); });async function upload() {
   const files = document.getElementById("file").files;
   if (!files.length) return;
   const fd = new FormData();

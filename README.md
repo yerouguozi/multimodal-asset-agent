@@ -26,7 +26,7 @@ FastAPI · SQLAlchemy · SQLite · LangGraph · SiliconFlow（多模态）· Dee
 
 ## 开发进度
 
-见 [docs/04-开发计划.md](docs/04-开发计划.md)，当前阶段：4（检索评测：Recall@1 0.705→0.833）已完成。
+见 [docs/04-开发计划.md](docs/04-开发计划.md)，当前阶段：5（LangGraph 素材助理 Agent + SSE 对话）已完成。
 
 ## 快速开始
 
