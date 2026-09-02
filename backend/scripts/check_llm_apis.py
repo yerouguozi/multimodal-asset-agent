@@ -1,4 +1,4 @@
-"""实测 SiliconFlow / DeepSeek 接口连通性与模型 ID。
+r"""实测 SiliconFlow / DeepSeek 接口连通性与模型 ID。
 
 用法（在 backend/ 下）：
     .\.venv\Scripts\python scripts\check_llm_apis.py
