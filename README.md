@@ -35,6 +35,10 @@ LangGraph 素材助理 Agent 帮你搜素材、生成素材、处理素材、总
 
 报告见 [docs/eval-reports/检索评测报告.md](docs/eval-reports/检索评测报告.md)。
 
+> **向量后端验证（实测）**：同一 45×5 评测集上，Milvus 后端与本地向量库结果完全一致
+> （Recall@1 0.789 / Recall@5 0.956 / MRR 0.893），证明向量层可平滑切换
+> （`VECTOR_BACKEND=milvus`，需先 `docker compose --profile milvus up -d`；连接失败自动降级本地）。
+
 ## 技术栈
 
 | 层 | 选型 |

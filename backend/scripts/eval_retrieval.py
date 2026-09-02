@@ -213,6 +213,7 @@ def main() -> int:
     print("== 初始化隔离评测环境 ==")
     id_by_name = seed_corpus()
     print(f"语料: {len(CORPUS)} 素材, 查询: {len(QUERIES)}")
+    vector_store.clear()  # 兼容本地/Milvus 后端，保证可重复运行
 
     print("\n== 嵌入语料 ==")
     embed_ok = embed_corpus()

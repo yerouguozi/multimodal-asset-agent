@@ -40,6 +40,10 @@ class MilvusVectorStore:
             ]
             col = Collection(name, schema=CollectionSchema(fields, description="mma assets"), using="mma")
             col.create_index("vector", {"index_type": "IVF_FLAT", "metric_type": "COSINE", "params": {"nlist": 128}})
+        try:
+            col.load()  # Milvus 搜索前必须 load
+        except Exception:
+            pass
         self._collections[name] = col
         return col
 
@@ -66,6 +70,10 @@ class MilvusVectorStore:
         col = self._collection(model, dim=len(query_vec))
         if col.num_entities == 0:
             return {}
+        try:
+            col.load()
+        except Exception:
+            pass
         res = col.search(
             data=[list(query_vec)],
             anns_field="vector",
