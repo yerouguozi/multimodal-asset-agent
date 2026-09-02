@@ -1,0 +1,36 @@
+# 一键部署：docker compose up -d --build
+# 打开 http://localhost:8080（前端） / http://localhost:8000/docs（接口文档）
+#
+# 密钥通过项目根目录 .env 注入（docker compose 自动读取），示例：
+#   SILICONFLOW_API_KEY=sk-xxx
+#   DEEPSEEK_API_KEY=sk-xxx
+#   JWT_SECRET=your-long-random-secret
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      DATABASE_URL: sqlite:///./data/assets.db
+      UPLOAD_DIR: ./data/uploads
+      VECTOR_STORE_PATH: ./data/vectors.npz
+      INGESTION_MODE: async
+      SILICONFLOW_API_KEY: ${SILICONFLOW_API_KEY:-}
+      SILICONFLOW_BASE_URL: ${SILICONFLOW_BASE_URL:-https://api.siliconflow.cn/v1}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      JWT_SECRET: ${JWT_SECRET:-change-me-to-a-long-random-secret}
+    volumes:
+      - ./backend/data:/app/data
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    depends_on:
+      - backend
+    ports:
+      - "8080:80"
+    restart: unless-stopped

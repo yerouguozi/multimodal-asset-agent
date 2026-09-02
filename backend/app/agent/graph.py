@@ -39,6 +39,7 @@ class AgentState(TypedDict):
     intent: str
     params: dict
     tool_result: dict
+    tool_used: str | None
     answer: str
 
 
@@ -118,6 +119,15 @@ def _parse_transform(text: str) -> tuple[int, str, dict]:
     return asset_id, operation, params
 
 
+_TOOL_BY_INTENT = {
+    "search": "search_assets",
+    "detail": "get_asset_detail",
+    "profile": "domain_profile",
+    "generate": "generate_image",
+    "transform": "transform_asset",
+}
+
+
 def tool_node(state: AgentState) -> dict:
     intent = state["intent"]
     params = state.get("params", {})
@@ -134,7 +144,7 @@ def tool_node(state: AgentState) -> dict:
         result = TOOL_REGISTRY["domain_profile"]()
     else:
         result = {"ok": True, "summary": "", "assets": []}
-    return {"tool_result": result}
+    return {"tool_result": result, "tool_used": _TOOL_BY_INTENT.get(intent)}
 
 
 # ---------- 组织回答 ----------

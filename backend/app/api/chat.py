@@ -29,8 +29,8 @@ def _sse(event: str, data: dict) -> str:
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
-def run_agent(message: str, session_id: str) -> tuple[str, list[dict]]:
-    """同步执行 LangGraph 图，收集步骤与最终回答。"""
+def run_agent(message: str, session_id: str) -> tuple[str, list[dict], list[str]]:
+    """同步执行 LangGraph 图，返回 (回答, 步骤列表, 工具名列表)。"""
     history = list(SESSION_MEMORY.get(session_id, deque(maxlen=6)))
     input_state = {
         "messages": history + [{"role": "user", "content": message}],
@@ -40,6 +40,7 @@ def run_agent(message: str, session_id: str) -> tuple[str, list[dict]]:
         "answer": "",
     }
     steps: list[dict] = []
+    tool_names: list[str] = []
     answer = ""
     for update in agent_app.stream(input_state, stream_mode="updates"):
         for node, data in update.items():
@@ -47,13 +48,16 @@ def run_agent(message: str, session_id: str) -> tuple[str, list[dict]]:
                 steps.append({"stage": "intent", "content": f"意图识别：{data.get('intent', '')}"})
             elif node == "tool":
                 steps.append({"stage": "tool", "content": data.get("tool_result", {}).get("summary", "")})
+                tool = data.get("tool_used")
+                if tool:
+                    tool_names.append(tool)
             elif node == "answer":
                 answer = data.get("answer", "")
     if answer:
         mem = SESSION_MEMORY.setdefault(session_id, deque(maxlen=6))
         mem.append({"role": "user", "content": message})
         mem.append({"role": "assistant", "content": answer})
-    return answer, steps
+    return answer, steps, tool_names
 
 
 @router.post("/chat")
@@ -66,7 +70,7 @@ async def chat(req: ChatRequest):
             yield _sse("error", {"text": "消息不能为空"})
             return
         yield _sse("meta", {"session_id": session_id})
-        answer, steps = await asyncio.to_thread(run_agent, message, session_id)
+        answer, steps, _ = await asyncio.to_thread(run_agent, message, session_id)
         for step in steps:
             yield _sse("step", step)
         yield _sse("answer", {"text": answer or "抱歉，我没有理解你的意思。"})

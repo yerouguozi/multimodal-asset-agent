@@ -99,6 +99,16 @@ class IngestionJob(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
 
 
+class User(Base):
+    """极简用户（供外部评测/后续扩展接入）。"""
+
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    username: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    password_hash: Mapped[str] = mapped_column(String(255))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
 class UsageLog(Base):
     """模型调用记录（成本追踪）。cost_estimate 为按调用次数的估算值。"""
 

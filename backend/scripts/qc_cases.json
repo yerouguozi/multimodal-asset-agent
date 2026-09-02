@@ -1,0 +1,18 @@
+[
+  {
+    "input_prompt": "帮我搜夜景",
+    "expected_behavior": "调用 search_assets 并返回与夜景相关的素材"
+  },
+  {
+    "input_prompt": "我的素材库是什么领域",
+    "expected_behavior": "调用 domain_profile 并总结素材库领域"
+  },
+  {
+    "input_prompt": "看看 #1",
+    "expected_behavior": "调用 get_asset_detail 并描述素材详情"
+  },
+  {
+    "input_prompt": "帮我生成一张星空插画",
+    "expected_behavior": "调用 generate_image 并告知生成入库结果"
+  }
+]

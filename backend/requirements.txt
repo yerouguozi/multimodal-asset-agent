@@ -16,3 +16,4 @@ imageio-ffmpeg>=0.5
 jieba>=0.42
 langgraph>=0.2
 langchain-core>=0.3
+pyjwt>=2.8

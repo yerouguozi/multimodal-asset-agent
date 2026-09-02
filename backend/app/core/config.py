@@ -48,6 +48,10 @@ class Settings(BaseSettings):
     # 文生图
     image_gen_model: str = "Qwen/Qwen-Image"
     image_gen_size: str = "1024x1024"
+
+    # JWT（质控平台等外部评测接入）
+    jwt_secret: str = "dev-secret-change-me-please-override-32bytes-min"
+    jwt_expire_minutes: int = 1440
     video_max_frames: int = 4
     audio_max_seconds: int = 600
 
