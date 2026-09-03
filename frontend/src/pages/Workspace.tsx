@@ -1,14 +1,24 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { deleteAsset, fetchAssets, fetchDomainProfile, searchAssets, searchByImage, uploadFiles, fetchUsageSummary } from "./api";
-import type { Asset, DomainProfile, UsageSummary } from "./types";
-import AssetDetailModal from "./components/AssetDetailModal";
-import AssetGrid from "./components/AssetGrid";
-import ChatPanel from "./components/ChatPanel";
-import DomainProfileCard from "./components/DomainProfileCard";
-import SearchBar from "./components/SearchBar";
-import UploadPanel from "./components/UploadPanel";
+import { Link } from "react-router-dom";
+import { ArrowLeft, FolderGit } from "lucide-react";
+import {
+  deleteAsset,
+  fetchAssets,
+  fetchDomainProfile,
+  searchAssets,
+  searchByImage,
+  uploadFiles,
+  fetchUsageSummary,
+} from "../api";
+import type { Asset, DomainProfile, UsageSummary } from "../types";
+import AssetDetailModal from "../components/AssetDetailModal";
+import AssetGrid from "../components/AssetGrid";
+import ChatPanel from "../components/ChatPanel";
+import DomainProfileCard from "../components/DomainProfileCard";
+import SearchBar from "../components/SearchBar";
+import UploadPanel from "../components/UploadPanel";
 
-export default function App() {
+export default function Workspace() {
   const [assets, setAssets] = useState<Asset[]>([]);
   const [total, setTotal] = useState(0);
   const [query, setQuery] = useState("");
@@ -122,10 +132,28 @@ export default function App() {
   };
 
   return (
-    <div className="app">
+    <div className="app workspace">
       <header className="app-header">
-        <h1>Multimodal Asset Agent</h1>
-        <span className="app-sub">多模态素材中心 · 上传什么，就长成什么</span>
+        <Link to="/" className="brand-link">
+          <span className="brand-mark">M</span>
+          <span className="brand-name">Multimodal Asset Agent</span>
+        </Link>
+        <span className="app-sub">上传什么，就长成什么的素材中心</span>
+        <div className="header-right">
+          <a
+            className="ghost-chip"
+            href="https://github.com/yerouguozi/multimodal-asset-agent"
+            target="_blank"
+            rel="noreferrer"
+          >
+            <FolderGit size={14} />
+            GitHub
+          </a>
+          <Link className="ghost-chip" to="/">
+            <ArrowLeft size={14} />
+            介绍页
+          </Link>
+        </div>
       </header>
 
       {notice && <div className="notice">{notice}</div>}
