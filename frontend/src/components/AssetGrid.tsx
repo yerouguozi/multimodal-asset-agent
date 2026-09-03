@@ -10,6 +10,7 @@ import {
   Trash2,
 } from "lucide-react";
 import type { Asset } from "../types";
+import { timeAgoZh } from "../time";
 
 interface Props {
   assets: Asset[];
@@ -38,20 +39,6 @@ const STATUS_TEXT: Record<string, string> = {
 function ModalityIcon({ modality, size = 15 }: { modality: string; size?: number }) {
   const Icon = MODALITY_ICON[modality] ?? FileText;
   return <Icon size={size} aria-hidden="true" />;
-}
-
-function timeAgo(iso: string): string {
-  const t = new Date(iso).getTime();
-  if (Number.isNaN(t)) return "";
-  const diff = Date.now() - t;
-  const min = Math.floor(diff / 60000);
-  if (min < 1) return "刚刚";
-  if (min < 60) return `${min} 分钟前`;
-  const h = Math.floor(min / 60);
-  if (h < 24) return `${h} 小时前`;
-  const d = Math.floor(h / 24);
-  if (d < 30) return `${d} 天前`;
-  return new Date(iso).toLocaleDateString("zh-CN");
 }
 
 function SkeletonGrid() {
@@ -167,7 +154,7 @@ export default function AssetGrid({
                 </div>
               )}
               <div className="asset-meta">
-                <span className="asset-time">{timeAgo(a.created_at) && `上传于 ${timeAgo(a.created_at)}`}</span>
+                <span className="asset-time">{timeAgoZh(a.created_at) && `上传于 ${timeAgoZh(a.created_at)}`}</span>
                 <button
                   className="asset-delete"
                   aria-label={`删除素材 #${a.id} ${a.name}`}

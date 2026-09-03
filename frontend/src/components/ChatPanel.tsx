@@ -27,6 +27,7 @@ import type {
   TraceMoment,
   TracePassage,
 } from "../types";
+import { timeAgoZh } from "../time";
 
 interface Msg {
   role: "user" | "assistant" | "step" | "plan" | "trace";
@@ -66,18 +67,6 @@ const TOOL_META: Record<
 function fmtTs(sec?: number | null): string {
   const s = Math.max(0, Math.floor(sec ?? 0));
   return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
-}
-
-function fmtWhen(iso: string): string {
-  const t = new Date(iso).getTime();
-  if (Number.isNaN(t)) return "";
-  const diff = Date.now() - t;
-  const min = Math.floor(diff / 60000);
-  if (min < 1) return "刚刚";
-  if (min < 60) return `${min} 分钟前`;
-  const h = Math.floor(min / 60);
-  if (h < 24) return `${h} 小时前`;
-  return new Date(iso).toLocaleDateString("zh-CN");
 }
 
 function makeSessionId(): string {
@@ -357,7 +346,7 @@ export default function ChatPanel({ onComplete, onOpenAsset }: Props) {
                 >
                   <span className="history-title">{s.title}</span>
                   <span className="history-meta">
-                    {s.message_count} 条 · {fmtWhen(s.updated_at)}
+                    {s.message_count} 条 · {timeAgoZh(s.updated_at)}
                   </span>
                 </button>
               ))

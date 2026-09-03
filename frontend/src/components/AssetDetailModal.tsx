@@ -17,6 +17,7 @@ import {
 import type { Asset } from "../types";
 import type { TranscriptSegment } from "../types";
 import { fetchAssetSegments } from "../api";
+import { fmtDateTime } from "../time";
 
 interface Props {
   asset: Asset;
@@ -43,13 +44,6 @@ function fmtSize(n: number): string {
   if (n >= 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`;
   if (n >= 1024) return `${(n / 1024).toFixed(1)} KB`;
   return `${n} B`;
-}
-
-function fmtDate(iso: string): string {
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime())
-    ? iso
-    : d.toLocaleString("zh-CN", { hour12: false });
 }
 
 function fmtTs(sec?: number): string {
@@ -141,7 +135,7 @@ export default function AssetDetailModal({ asset, initialSeek, onClose, onDelete
     { k: "编号", v: `#${asset.id}`, Icon: Hash },
     { k: "原始文件名", v: asset.original_filename, Icon: FileText },
     { k: "大小", v: fmtSize(asset.size_bytes), Icon: HardDrive },
-    { k: "上传时间", v: fmtDate(asset.created_at), Icon: Clock },
+    { k: "上传时间", v: fmtDateTime(asset.created_at), Icon: Clock },
     ...(asset.width && asset.height
       ? [{ k: "尺寸", v: `${asset.width} × ${asset.height}px`, Icon: Maximize2 }]
       : []),

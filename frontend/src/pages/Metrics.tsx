@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { Activity, ArrowLeft, BarChart3, Clock3, Gauge, RefreshCw } from "lucide-react";
 import { fetchSearchMetrics } from "../api";
 import type { SearchMetrics } from "../types";
+import { fmtDateTime } from "../time";
 
 const STRATEGY_LABEL: Record<string, string> = {
   full: "full（含重排）",
@@ -11,11 +12,6 @@ const STRATEGY_LABEL: Record<string, string> = {
   tri: "朴素三路",
   bm25: "仅 BM25",
 };
-
-function fmtTime(iso: string): string {
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? iso : d.toLocaleTimeString("zh-CN", { hour12: false });
-}
 
 export default function Metrics() {
   const [data, setData] = useState<SearchMetrics | null>(null);
@@ -155,7 +151,7 @@ export default function Metrics() {
                   </div>
                   {[...data.recent].reverse().map((r, i) => (
                     <div key={`${r.created_at}-${i}`} className="ev-row">
-                      <span>{fmtTime(r.created_at)}</span>
+                      <span>{fmtDateTime(r.created_at, false)}</span>
                       <span className="ev-query">{r.query}</span>
                       <span>{r.source === "agent-tool" ? "Agent 工具" : "API"}</span>
                       <span>{STRATEGY_LABEL[r.strategy] ?? r.strategy}</span>
