@@ -105,7 +105,7 @@ def generate_image(prompt: str) -> dict:
     from ..usage import record_usage
 
     data = llm_client.generate_image(prompt)
-    record_usage(None, settings.image_gen_model, "image_gen")
+    record_usage(None, settings.image_gen_model, "image_gen", owner=owner_ctx.get())
     if not data:
         return {"ok": False, "summary": "文生图失败（模型不可用或未配置 Key）", "assets": []}
 

@@ -141,6 +141,7 @@ class UsageLog(Base):
     __tablename__ = "usage_logs"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    owner: Mapped[str] = mapped_column(String(64), default="local", index=True)
     asset_id: Mapped[int | None] = mapped_column(ForeignKey("assets.id"), nullable=True, index=True)
     model: Mapped[str] = mapped_column(String(120))
     operation: Mapped[str] = mapped_column(String(50))

@@ -63,6 +63,12 @@ def _migrate_columns() -> None:
                     conn.execute(text("ALTER TABLE document_chunks ADD COLUMN end FLOAT"))
             except Exception:
                 pass
+            try:
+                cols = {c["name"] for c in inspect(engine).get_columns("usage_logs")}
+                if "owner" not in cols:
+                    conn.execute(text("ALTER TABLE usage_logs ADD COLUMN owner VARCHAR(64) DEFAULT 'local'"))
+            except Exception:
+                pass
     except Exception:
         # 表不存在或已迁移，忽略
         pass
