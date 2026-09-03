@@ -1,126 +1,109 @@
 # Multimodal Asset Agent（多模态素材 Agent）
 
-![CI](https://github.com/yerouguozi/multimodal-asset-agent/actions/workflows/ci.yml/badge.svg)
+[![CI](https://github.com/yerouguozi/multimodal-asset-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/yerouguozi/multimodal-asset-agent/actions/workflows/ci.yml)
 
-> 不预设领域的多模态素材管理 Agent——上传什么素材，它就自动"长成"什么方向的素材中心。
+> 不预设领域的多模态素材管理系统：图片 / 视频 / 音频 / 文档统一入库，自动理解、分块、向量化；支持素材级与片段级检索，并由 LangGraph Agent 完成“检索 → 引用 → 回答”的闭环。
 
-## 项目叙事（30 秒版）
+## ✨ 功能特性
 
-**问题**：素材库里的图片 / 视频 / 音频 / 文档命名混乱、类型混杂，用户想按"内容语义"
-找东西，而不是靠文件名。
+- **统一入库流水线**：SHA-256/pHash 去重、缩略图/封面、OCR、语音转写（含时间片）、文档摘要、自动打标、统一向量化；异步任务队列 + 自动重试；
+- **素材级混合检索**：自实现 BM25 + bge-m3 文本向量 + 图片 VL 向量（按查询类型门控），RRF 融合 + bge-reranker 精排；支持以图搜图与音视频转写片段时间戳检索；
+- **片段级 RAG**：文档按段落、音视频按转写时间片统一分块并逐段向量化；片段级 BM25 + 向量 RRF + 重排，命中返回原文出处（第几段 / 时间戳）；旧数据首次查询自动懒补分块与向量；
+- **素材助理 Agent**：LangGraph 任务规划 → 多步工具循环（检索/详情/画像/文生图/处理/片段定位/片段检索共 7 个工具）→ 组织回答；SSE 逐步推送执行轨迹；
+- **防幻觉引用校验**：回答中的素材编号必须来自本轮工具结果，非法引用自动标注；对话记忆落库，支持多会话切换与历史回看；
+- **素材管理**：单文件下载、多选 ZIP 打包、编辑名称/描述、按名增删标签、软删除回收站（可恢复/彻底删除）、失败素材一键重试、详情内嵌音视频播放器并可跳转转写时间片；
+- **多用户与安全**：JWT 注册/登录，素材/画像/会话/成本日志全部按 owner 隔离；媒体文件受控访问（Header 或 query token + owner 校验）；
+- **可观测与治理**：检索全链路日志（API / Agent 工具），平均与 P95 延迟、来源与策略分布、高频查询；每用户模型调用按日/月/小时配额限流；
+- **向量后端可切换**：本地 npz / Milvus（素材与片段各自独立命名空间，连接失败自动降级）。
 
-**方案**：四条模态流水线把素材统一翻译成"描述 / 标签 / 正文 / 向量"四种信号；
-检索按查询类型**门控**启用不同信号（关键词 / 文本向量 / 图片向量），再做 RRF 融合与
-重排精排；长文档与音视频时间片自动分块，支持片段级检索并返回原文出处；
-LangGraph Agent 把"检索—引用—回答"变成可观测、可校验的流程。
+## 🧪 评测体系
 
-**关键取舍（有评测支撑）**：朴素多模态三路融合在 45×5 评测中反而拉低 Recall@1
-（-0.167），据此设计"仅视觉查询启用 VL 向量"的门控，Recall@5 达到 0.956；
-最终精排兜底 Recall@1 0.789 / MRR 0.893（纯 BM25 基线 0.611）。
-
-**工程闭环**：94 个 pytest（LLM 全 mock）、检索日志与 P95 指标、策略 A/B 参数、
-JWT 多用户隔离（含媒体鉴权 / 回收站 / 成本配额）、Docker 一键部署实测通过。
-
-图片 / 视频 / 音频 / 文档统一入库，自动理解、打标、索引；自然语言跨模态检索；
-LangGraph 素材助理 Agent 帮你搜素材、生成素材、处理素材、总结素材库。
-
-## 核心能力
-
-- **多模态入库自动化**：四类素材一条异步流水线——SHA-256/pHash 去重、缩略图/封面、视觉理解（描述/标签/OCR）、音视频转写、文档摘要、统一向量化，失败自动重试
-- **跨模态语义检索**：自实现 BM25（jieba+二元组）+ bge-m3 向量，RRF(60) 融合，bge-reranker 精排；字段权重随素材分布自适应
-- **领域自适应**：分类体系不写死，标签聚合 + LLM 洞察自动生成"我的素材库是什么领域"
-- **素材助理 Agent**：LangGraph 任务规划（LLM 结构化参数）→ 多步工具循环 → 组织回答，SSE 逐步推送；支持检索、详情、画像、文生图入库、素材处理、会话记忆落库
-- **执行轨迹可观测**：Agent 每跑一步实时推送 plan / tool 结构化事件（工具名、耗时、命中素材、片段时间戳），前端渲染成可点击的轨迹卡片；会话记忆支持列表 / 历史回看 / 多会话切换
-- **多用户隔离**：JWT 登录后素材 / 检索 / 领域画像 / Agent 会话 / 模型成本日志全部按 owner 隔离（未登录自动降级为 local 访客，方便本地体验）；媒体文件经 /media 直接可播放
-- **评测仪表盘**：/eval 页把 45×5 检索评测量化对比与结论可视化，数据与 docs/eval-reports 同源
-- **可靠性工程**：Agent 回答做引用校验（#id 必须来自本轮工具结果，防幻觉硬规则）；API / Agent 检索全量落日志，/api/metrics/search 输出平均与 P95 延迟、策略/来源分布、高频查询与最近明细；/metrics 前端仪表盘可视化
-- **进阶检索**：以图搜图（VL 图片向量）、音视频转写片段时间戳检索（"找我说过 XX 的那一段"）
-- **片段级检索（长文档 / 音视频时间片 RAG）**：文档段落（段落感知+重叠）与转写时间片统一分块并逐块 bge-m3 向量化；/api/search/passages 在 chunk 上做 BM25 + 向量 RRF 融合 + 重排精排，返回原文、出处与时间戳；旧数据首次查询自动补分块与向量
-- **片段级向量后端可切换**：chunk 向量库与素材向量库同构，支持 local npz / Milvus（独立 mma_chunk_ 命名空间，连接失败自动降级）
-- **两级检索对比评测**：scripts/eval_passage_vs_asset.py 离线样例对比整篇 Top-5 与片段 Top-1 召回与延迟，报告见 docs/eval-reports；片段命中可在对话轨迹里一键点开素材并跳转到对应时间戳播放
-- **素材取回**：单文件下载（卡片/详情）+ 多选 ZIP 批量打包（仅限本人素材，服务端打包）
-- **素材治理**：详情弹窗可编辑名称/描述；接口支持按名删除标签（人工修正可反哺检索字段）
-- **配额与限流**：每用户模型调用按今日/本月/近 1 小时配额，上传/以图搜图/对话前预检并返回 429；/api/usage/summary 返回配额快照
-- **媒体鉴权**：/media 改为受控访问（JWT Header 或 ?token=，图片/视频自动带 token），仅本人可读；未登录访客仅能访问 local 素材
-- **回收站 + 失败重试**：删除先进回收站可恢复，彻底删除才移除文件与向量；失败素材可一键重试（自动重新入队）
-- **成本意识**：简单图片走 Qwen3-VL-8B、复杂走 32B 的模型路由；每次模型调用记入 UsageLog，前端实时显示估算成本
-- **可评测**：自建 24 素材/39 查询评测集，三种检索策略量化对比（见下方）
-
-## 检索评测（真实模型）
+- **检索评测**：45 组真实查询 × 5 策略（含语义改写与纯视觉查询），指标含 Recall@k / MRR / NDCG；
 
 | 策略 | Recall@1 | Recall@3 | Recall@5 | MRR | NDCG@3 |
 |---|---|---|---|---|---|
 | A 纯 BM25（基线） | 0.611 | 0.678 | 0.678 | 0.667 | 0.667 |
-| B + 文本向量 RRF | 0.733 | 0.833 | 0.911 | 0.828 | 0.813 |
-| D + 朴素三路融合(VL) | 0.567 | 0.733 | 0.778 | 0.697 | 0.684 |
-| E + 门控三路融合 | 0.733 | 0.900 | **0.956** | 0.851 | 0.855 |
-| C + 重排精排 | **0.789** | **0.944** | 0.944 | **0.893** | **0.900** |
+| B +文本向量 RRF | 0.733 | 0.833 | 0.911 | 0.828 | 0.813 |
+| D +朴素三路融合(VL) | 0.567 | 0.733 | 0.778 | 0.697 | 0.684 |
+| E +门控三路融合 | 0.733 | 0.900 | **0.956** | 0.851 | 0.855 |
+| C +重排精排 | **0.789** | **0.944** | 0.944 | **0.893** | **0.900** |
 
-结论（45 查询，含语义改写 + 纯视觉查询）：
-1. 文本向量解决"换说法"查询（BM25 覆盖不了）；
-2. **朴素多模态融合是负结果**：VL 图片向量对纯视觉查询有用，但会把语义查询前几名灌满图片（Recall@1 -0.167）；
-3. **门控启用**（仅视觉查询走 VL）恢复并超越：Recall@5 0.956 全场最高，验证"多模态信号按查询类型启用"；
-4. 重排精排做最终兜底：Recall@1 0.789 / MRR 0.893 / 零 Recall@5 失败。
+- **片段级对比**：`backend/scripts/eval_passage_vs_asset.py` 离线样例对比整篇 Top-5 与片段 Top-1（原文含答案短语判定），报告输出至 `docs/eval-reports/`；
+- **工程测试**：94 个 pytest 用例（LLM/Embedding 全部 mock，离线可跑），GitHub Actions 自动运行。
 
-报告见 [docs/eval-reports/检索评测报告.md](docs/eval-reports/检索评测报告.md)。
-
-> **向量后端验证（实测）**：同一 45×5 评测集上，Milvus 后端与本地向量库结果完全一致
-> （Recall@1 0.789 / Recall@5 0.956 / MRR 0.893），证明向量层可平滑切换
-> （`VECTOR_BACKEND=milvus`，需先 `docker compose --profile milvus up -d`；连接失败自动降级本地）。
-
-## 技术栈
-
-| 层 | 选型 |
-|---|---|
-| 后端 | Python 3.14 · FastAPI · SQLAlchemy 2.x · SQLite（可换 PG） |
-| Agent | LangGraph（意图→工具→回答 状态图） |
-| 多模态 | SiliconFlow：Qwen3-VL（视觉/路由）/ SenseVoice（转写）/ Qwen-Image（文生图）/ bge-m3 / bge-reranker |
-| 检索 | 自实现 BM25 · RRF 融合 · 重排 · Recall@k/MRR/NDCG 评测 |
-| 前端 | React 18 · Vite · TypeScript · Nginx |
-| 测试/CI | pytest（94 用例）· GitHub Actions |
-| 部署 | Docker Compose（backend + frontend/nginx） |
-
-## 架构
+## 🏗️ 架构
 
 ```mermaid
 graph TD
-    UI[React 前端] -->|上传/检索/对话 SSE| API[FastAPI]
+    UI[React 前端] -->|上传/检索/对话 SSE| API[FastAPI 后端]
     API --> PIPE[入库流水线 Worker]
     PIPE --> PROC[模态适配器 图/视频/音频/文档]
-    PROC --> LLM[SiliconFlow + DeepSeek<br/>视觉/转写/文生图/摘要/embedding/rerank]
-    PROC --> VS[(本地向量库)]
+    PROC --> LLM[SiliconFlow + DeepSeek<br/>视觉/转写/embedding/rerank/摘要]
+    PROC --> CHUNK[分块 段落/时间片]
+    CHUNK --> CV[(片段向量库)]
+    PROC --> VS[(素材向量库)]
     API --> SEARCH[BM25 + 向量 RRF + 重排]
     API --> AGENT[LangGraph 素材助理]
-    AGENT --> TOOLS[search/generate/transform/profile]
-    API --> DOMAIN[领域画像]
-    API --> USAGE[模型成本追踪]
-    API --> QC[质控平台兼容会话接口]
+    AGENT --> TOOLS[7 个工具]
+    AGENT --> CHECK[引用校验]
+    API --> TRASH[(回收站)]
+    API --> LOG[(检索/成本日志)]
 ```
 
-## 快速开始
+设计原则：工具结果是事实来源，LLM 只负责规划与组织语言；检索按查询类型门控启用多模态信号，避免“信号越多越好”的直觉误区。
+
+## 🛠️ 技术栈
+
+| 层 | 技术 |
+| --- | --- |
+| 后端 | Python · FastAPI · SQLAlchemy · SQLite |
+| Agent | LangGraph |
+| LLM | SiliconFlow：Qwen3-VL / SenseVoice / Qwen-Image / bge-m3 / bge-reranker；DeepSeek |
+| 检索 | 自实现 BM25 · RRF 融合 · 重排 · 门控 |
+| 向量 | 本地 npz（默认）/ Milvus（可选，`docker compose --profile milvus`） |
+| 前端 | React 18 · TypeScript · Vite · Nginx |
+| 测试/CI | pytest · GitHub Actions |
+
+## 📁 目录结构
+
+```text
+.
+├── backend/
+│   ├── app/
+│   │   ├── api/          # 路由（upload/assets/search/passages/chat/usage/metrics/trash/auth）
+│   │   ├── agent/        # LangGraph 素材助理（tools + graph）
+│   │   ├── pipeline/     # 入库流水线、模态处理器、分块
+│   │   ├── retrieval/    # BM25 / 向量库 / 片段检索 / 检索日志
+│   │   ├── domain/       # 领域画像
+│   │   ├── llm/          # 多模态客户端（降级/重试/路由）
+│   │   └── core/         # 配置 / 数据库 / 迁移
+│   ├── scripts/          # 实测 / 演示 / 评测
+│   └── tests/            # 94 个 pytest
+├── frontend/             # React + Vite + TS（介绍/登录/工作台/评测/指标）
+├── docs/eval-reports/    # 检索评测报告
+└── docker-compose.yml    # 一键部署（含可选 milvus profile）
+```
+
+## 🚀 快速开始
 
 ### 方式一：Docker 一键部署
 
 ```powershell
-# 注意：Docker 读根目录 .env；本地开发（方式二）读 backend/.env
-Copy-Item .env.example .env     # 然后编辑 .env 填入 Key 与 JWT_SECRET
+Copy-Item .env.example .env   # 填入 SILICONFLOW_API_KEY / DEEPSEEK_API_KEY / JWT_SECRET
 docker compose up -d --build
 ```
 
-打开 <http://localhost:8080>（前端），接口文档 <http://localhost:8000/docs>。
-不填 Key 也能起（自动降级：不打标、仅关键词检索）；填入
-SILICONFLOW_API_KEY / DEEPSEEK_API_KEY 后获得完整多模态理解与语义检索。
+前端 `http://localhost:8080`，接口文档 `http://localhost:8000/docs`。不填 Key 也能启动（自动降级为不打标、仅关键词检索）。
 
 ### 方式二：本地开发
 
 ```powershell
-# 后端
+# 后端（密钥放 backend/.env，参考 backend/.env.example）
 cd backend
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-Copy-Item .env.example .env   # 填入 SILICONFLOW_API_KEY / DEEPSEEK_API_KEY
-.\.venv\Scripts\python -m uvicorn app.main:app --reload --port 8000
+python -m uvicorn app.main:app --reload --port 8000
 
 # 前端（另开终端）
 cd frontend
@@ -128,58 +111,51 @@ npm install
 npm run dev
 ```
 
-打开 <http://localhost:5173>。不填 Key 也能跑（自动降级：不打标/仅关键词检索）。
+### （可选）启用 Milvus
 
-### 一键演示与评测
+```powershell
+docker compose --profile milvus up -d
+```
+
+根目录 `.env` 中设置 `VECTOR_BACKEND=milvus` 后重启后端；默认 `local` 不依赖 Docker。
+
+## ⚙️ 环境变量
+
+| 变量 | 必填 | 说明 |
+| --- | --- | --- |
+| `SILICONFLOW_API_KEY` | 否* | 视觉理解 / Embedding / 转写 / 重排 / 文生图 |
+| `DEEPSEEK_API_KEY` | 否* | Agent 规划、摘要与标签 |
+| `JWT_SECRET` | 否 | JWT 签名密钥，生产建议修改 |
+| `INGESTION_MODE` | 否 | `async`（默认）/ `sync` |
+| `VECTOR_BACKEND` | 否 | `local`（默认）/ `milvus` |
+| `USAGE_DAILY_LIMIT` | 否 | 每用户今日模型调用配额，默认 200 |
+| `USAGE_MONTHLY_LIMIT` | 否 | 每用户本月配额，默认 2000 |
+| `USAGE_HOURLY_LIMIT` | 否 | 每用户近 1 小时配额，默认 100 |
+
+\* 未配置时自动降级：不上模型 Key 则跳过理解/向量，仅保留关键词检索与上传入库。
+
+## 🧪 测试
 
 ```powershell
 cd backend
-.\.venv\Scripts\python scripts\check_llm_apis.py   # 实测四个模型接口
-.\.venv\Scripts\python scripts\demo_upload.py       # 生成 4 种素材并真实处理
-.\.venv\Scripts\python scripts\demo_chat.py         # 与素材助理对话
-.\.venv\Scripts\python scripts\eval_retrieval.py    # 检索评测 → docs/eval-reports/
+python -m pytest
 ```
 
-## API 一览
+预期：**94 passed**。
 
-| 方法 | 路径 | 说明 |
-|---|---|---|
-| POST | /api/upload | 上传素材（多文件） |
-| GET | /api/assets | 素材列表/筛选 |
-| GET/PATCH/DELETE | /api/assets/{id} | 详情 / 改名与描述 / 增删标签 / 删除 |
-| GET | /api/search?q=&strategy= | 跨模态语义检索（strategy：full/rrf/gate/tri/bm25，供在线 A/B） |
-| POST | /api/search/image | 以图搜图（上传参考图） |
-| GET | /api/search/transcript | 音视频转写片段时间戳检索 |
-| GET | /api/search/passages | 长文档片段级检索（返回原文段落与出处） |
-| GET | /api/domain/profile | 领域画像 |
-| POST | /api/chat | Agent 对话（SSE 逐步推送） |
-| GET | /api/usage/summary | 模型成本追踪 |
-| GET | /api/chat/sessions | 会话列表（消息数 / 最后消息 / 最近活跃） |
-| GET | /api/chat/sessions/{id}/messages | 单个会话历史消息 |
-| GET | /api/metrics/search | 检索日志指标（总量 / 平均与 P95 延迟 / 高频查询） |
-| POST | /api/assets/download-zip | 多选原始文件打包下载（按 owner 过滤） |
-| POST | /api/auth/register / login | JWT（质控平台等接入用） |
-| POST | /api/sessions... | 质控平台兼容评测接口 |
+## 🧠 设计要点
 
-## 目录结构
+- **门控多模态融合**：朴素三路融合在评测中拉低 Recall@1（-0.167），据此改为仅视觉查询启用 VL 向量，Recall@5 升至 0.956；
+- **两级检索配合**：素材级召回收敛候选，片段级精排取原文出处，二者共用日志与策略参数；
+- **防幻觉两道防线**：Prompt 约束 + 代码级引用校验；工具对空结果返回明确提示；
+- **懒回填**：新增分块/向量能力后，旧数据首次查询自动补齐，无需重跑入库；
+- **优雅降级**：LLM Key 缺失、Milvus 不可用、重排失败、向量缺失均降级为可用状态；
+- **UTC 存储 / 本地展示**：后端统一存 UTC，前端按本地时区渲染；
+- **多用户闭环**：素材/画像/会话/成本/媒体访问全部按 owner 隔离，删除有回收站兜底。
 
-```text
-├── backend/
-│   ├── app/
-│   │   ├── api/         # 路由（upload/assets/search/chat/domain/usage/auth/qc）
-│   │   ├── agent/       # LangGraph 素材助理（tools + graph）
-│   │   ├── pipeline/    # 入库流水线 + 模态适配器
-│   │   ├── retrieval/   # BM25 / 向量库 / 混合检索 / 指标
-│   │   ├── domain/      # 领域画像
-│   │   ├── llm/         # 多模态客户端（降级/重试/路由）
-│   │   └── core/        # 配置 / 数据库
-│   ├── scripts/         # 实测 / 演示 / 评测
-│   └── tests/           # 94 个 pytest 用例（LLM 全 mock）
-├── frontend/            # React + Vite + TS
-├── docs/eval-reports/   # 检索评测报告
-└── docker-compose.yml
-```
+## 🗺️ 后续规划
 
-## 文档导航
-
-- [检索评测报告](docs/eval-reports/检索评测报告.md)
+- Alembic 正式接管数据库迁移（当前为启动时最小迁移）；
+- Milvus 规模化验证（千级素材基准）；
+- 前端 E2E 测试；
+- 长音频分片转录合并。
