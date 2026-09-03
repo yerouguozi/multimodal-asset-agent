@@ -1,9 +1,12 @@
 """素材管理：列表 / 详情 / 改标签 / 删除。"""
 from __future__ import annotations
 
+import json
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from .auth import resolve_owner
 from ..core.database import get_db
 from ..models import Asset, Tag
 from ..retrieval.vector_store import vector_store
@@ -22,8 +25,9 @@ def list_assets(
     page: int = 1,
     page_size: int = 20,
     db: Session = Depends(get_db),
+    owner: str = Depends(resolve_owner),
 ):
-    q = db.query(Asset)
+    q = db.query(Asset).filter(Asset.owner == owner)
     if modality:
         q = q.filter(Asset.modality == modality)
     if status:
@@ -41,16 +45,46 @@ def list_assets(
 
 
 @router.get("/{asset_id}", response_model=AssetOut)
-def get_asset(asset_id: int, db: Session = Depends(get_db)):
-    asset = db.get(Asset, asset_id)
+def get_asset(asset_id: int, db: Session = Depends(get_db), owner: str = Depends(resolve_owner)):
+    asset = db.query(Asset).filter(Asset.id == asset_id, Asset.owner == owner).first()
     if asset is None:
         raise HTTPException(404, "素材不存在")
     return asset
 
 
+@router.get("/{asset_id}/segments")
+def get_asset_segments(
+    asset_id: int,
+    db: Session = Depends(get_db),
+    owner: str = Depends(resolve_owner),
+):
+    """返回音视频转写片断（供播放器时间戳跳转）。"""
+    asset = db.query(Asset).filter(Asset.id == asset_id, Asset.owner == owner).first()
+    if asset is None:
+        raise HTTPException(404, "素材不存在")
+    try:
+        segments = json.loads(asset.transcript_segments or "[]")
+    except Exception:
+        segments = []
+    return {
+        "asset_id": asset.id,
+        "modality": asset.modality,
+        "duration": asset.duration,
+        "segments": [
+            {"start": s.get("start", 0), "end": s.get("end"), "text": s.get("text", "")}
+            for s in segments
+        ],
+    }
+
+
 @router.patch("/{asset_id}", response_model=AssetOut)
-def patch_asset(asset_id: int, body: AssetPatch, db: Session = Depends(get_db)):
-    asset = db.get(Asset, asset_id)
+def patch_asset(
+    asset_id: int,
+    body: AssetPatch,
+    db: Session = Depends(get_db),
+    owner: str = Depends(resolve_owner),
+):
+    asset = db.query(Asset).filter(Asset.id == asset_id, Asset.owner == owner).first()
     if asset is None:
         raise HTTPException(404, "素材不存在")
     for name in body.add_tags:
@@ -65,8 +99,12 @@ def patch_asset(asset_id: int, body: AssetPatch, db: Session = Depends(get_db)):
 
 
 @router.delete("/{asset_id}")
-def delete_asset(asset_id: int, db: Session = Depends(get_db)):
-    asset = db.get(Asset, asset_id)
+def delete_asset(
+    asset_id: int,
+    db: Session = Depends(get_db),
+    owner: str = Depends(resolve_owner),
+):
+    asset = db.query(Asset).filter(Asset.id == asset_id, Asset.owner == owner).first()
     if asset is None:
         raise HTTPException(404, "素材不存在")
     # 删除磁盘文件
@@ -85,10 +123,10 @@ def delete_asset(asset_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/stats/overview", response_model=AssetStatsOut)
-def stats(db: Session = Depends(get_db)):
+def stats(db: Session = Depends(get_db), owner: str = Depends(resolve_owner)):
     from collections import Counter
 
-    assets = db.query(Asset).all()
+    assets = db.query(Asset).filter(Asset.owner == owner).all()
     by_modality = Counter(a.modality for a in assets)
     by_status = Counter(a.status for a in assets)
     tag_counter: Counter[str] = Counter()

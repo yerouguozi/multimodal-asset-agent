@@ -10,6 +10,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
+from .auth import resolve_owner
 from ..core.config import settings
 from ..core.database import get_db
 from ..models import Asset
@@ -56,7 +57,11 @@ def _sha256(data: bytes) -> str:
 
 
 @router.post("/upload", response_model=UploadResult)
-async def upload(files: list[UploadFile] = File(...), db: Session = Depends(get_db)):
+async def upload(
+    files: list[UploadFile] = File(...),
+    db: Session = Depends(get_db),
+    owner: str = Depends(resolve_owner),
+):
     items: list[UploadItem] = []
     for f in files:
         modality = detect_modality(f.content_type, f.filename or "")
@@ -70,7 +75,11 @@ async def upload(files: list[UploadFile] = File(...), db: Session = Depends(get_
             continue
 
         digest = _sha256(content)
-        existing = db.query(Asset).filter(Asset.sha256 == digest).first()
+        existing = (
+            db.query(Asset)
+            .filter(Asset.sha256 == digest, Asset.owner == owner)
+            .first()
+        )
         if existing:
             items.append(UploadItem(duplicate_of=existing.id))
             continue
@@ -84,6 +93,7 @@ async def upload(files: list[UploadFile] = File(...), db: Session = Depends(get_
         target.write_bytes(content)
 
         asset = Asset(
+            owner=owner,
             name=Path(f.filename or storage_name).stem[:120],
             original_filename=f.filename or storage_name,
             modality=modality,

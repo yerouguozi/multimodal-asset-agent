@@ -1,0 +1,29 @@
+{
+  "meta": {
+    "title": "检索评测报告",
+    "queries": 45,
+    "strategies": 5,
+    "note": "45 组真实查询 × 5 检索策略，含语义改写与纯视觉查询，真实模型评测。"
+  },
+  "best": {
+    "strategy": "C：+重排精排",
+    "recall1": 0.789,
+    "recall5": 0.956,
+    "mrr": 0.893,
+    "note": "Recall@5 全场最高来自 E 门控三路融合，Recall@1 / MRR 最高来自 C 重排精排"
+  },
+  "strategies": [
+    { "key": "A", "name": "纯 BM25（基线）", "recall1": 0.611, "recall3": 0.678, "recall5": 0.678, "mrr": 0.667, "ndcg3": 0.667 },
+    { "key": "B", "name": "+文本向量 RRF", "recall1": 0.733, "recall3": 0.833, "recall5": 0.911, "mrr": 0.828, "ndcg3": 0.813 },
+    { "key": "D", "name": "+朴素三路融合(VL)", "recall1": 0.567, "recall3": 0.733, "recall5": 0.778, "mrr": 0.697, "ndcg3": 0.684 },
+    { "key": "E", "name": "+门控三路融合", "recall1": 0.733, "recall3": 0.9, "recall5": 0.956, "mrr": 0.851, "ndcg3": 0.855 },
+    { "key": "C", "name": "+重排精排", "recall1": 0.789, "recall3": 0.944, "recall5": 0.944, "mrr": 0.893, "ndcg3": 0.9 }
+  ],
+  "conclusions": [
+    "文本向量解决“换说法”查询，BM25 覆盖不了；",
+    "朴素多模态融合是负结果：VL 图片向量把语义查询前几名灌满图片（Recall@1 -0.167）；",
+    "门控启用后（仅视觉查询走 VL）恢复并超越：Recall@5 0.956 全场最高；",
+    "重排精排兜底：Recall@1 0.789 / MRR 0.893 / 零 Recall@5 失败。"
+  ],
+  "consistency": "同一 45×5 评测集上，Milvus 后端与本地向量库结果完全一致（Recall@1 0.789 / Recall@5 0.956 / MRR 0.893），证明向量层可平滑切换。"
+}

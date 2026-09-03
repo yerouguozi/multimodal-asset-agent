@@ -41,6 +41,13 @@ def _migrate_columns() -> None:
 
     try:
         with engine.begin() as conn:
+            for table in ("assets", "chat_sessions"):
+                try:
+                    cols = {c["name"] for c in inspect(engine).get_columns(table)}
+                    if "owner" not in cols:
+                        conn.execute(text(f"ALTER TABLE {table} ADD COLUMN owner VARCHAR(64) DEFAULT 'local'"))
+                except Exception:
+                    continue
             cols = {c["name"] for c in inspect(engine).get_columns("assets")}
             if "vision_model" not in cols:
                 conn.execute(text("ALTER TABLE assets ADD COLUMN vision_model VARCHAR(120)"))

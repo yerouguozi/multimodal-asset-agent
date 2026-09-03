@@ -91,3 +91,31 @@ def get_current_user(
     if user is None:
         raise HTTPException(401, "用户不存在")
     return user
+
+
+def resolve_owner(
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+) -> str:
+    """数据所有者解析：无 token 视为本地访客 local；带 token 校验后返回用户名。
+
+    这样既保留「不开账号也能本地体验」的降级路径，又让注册用户拿到真正的
+    数据隔离（素材 / 检索 / 画像 / 会话都按 owner 过滤）。
+    """
+    if not authorization or not authorization.lower().startswith("bearer "):
+        return "local"
+    token = authorization.split(" ", 1)[1].strip()
+    try:
+        payload = jwt.decode(token, settings.jwt_secret, algorithms=["HS256"])
+    except jwt.PyJWTError:
+        raise HTTPException(401, "token 无效或过期")
+    username = payload.get("sub", "")
+    user = db.query(User).filter(User.username == username).first()
+    if user is None:
+        raise HTTPException(401, "用户不存在")
+    return user.username
+
+
+@router.get("/me")
+def me(user: User = Depends(get_current_user)) -> dict:
+    return {"username": user.username}

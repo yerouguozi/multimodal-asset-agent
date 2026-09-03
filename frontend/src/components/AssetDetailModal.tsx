@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ComponentType } from "react";
 import {
   Clock,
@@ -15,6 +15,8 @@ import {
   X,
 } from "lucide-react";
 import type { Asset } from "../types";
+import type { TranscriptSegment } from "../types";
+import { fetchAssetSegments } from "../api";
 
 interface Props {
   asset: Asset;
@@ -49,12 +51,20 @@ function fmtDate(iso: string): string {
     : d.toLocaleString("zh-CN", { hour12: false });
 }
 
+function fmtTs(sec?: number): string {
+  const s = Math.max(0, Math.floor(sec ?? 0));
+  return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+}
+
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 export default function AssetDetailModal({ asset, onClose, onDelete }: Props) {
   const modalRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [segments, setSegments] = useState<TranscriptSegment[]>([]);
 
   useEffect(() => {
     const prev = document.activeElement as HTMLElement | null;
@@ -92,6 +102,27 @@ export default function AssetDetailModal({ asset, onClose, onDelete }: Props) {
       prev?.focus?.();
     };
   }, [onClose]);
+
+  useEffect(() => {
+    if (asset.modality !== "video" && asset.modality !== "audio") return;
+    let alive = true;
+    fetchAssetSegments(asset.id)
+      .then((d) => {
+        if (alive) setSegments(d.segments);
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [asset.id, asset.modality]);
+
+  const seekTo = (start: number) => {
+    const el = videoRef.current ?? audioRef.current;
+    if (el) {
+      el.currentTime = start;
+      void el.play();
+    }
+  };
 
   const Icon = MODALITY_ICON[asset.modality] ?? FileText;
   const rows: { k: string; v: string; Icon: ComponentType<{ size?: number | string; className?: string }> }[] = [
@@ -152,10 +183,47 @@ export default function AssetDetailModal({ asset, onClose, onDelete }: Props) {
         </header>
 
         <div className="modal-body">
-          {asset.thumbnail_url && (
+          {asset.modality === "video" && asset.media_url ? (
+            <div className="modal-preview">
+              <video
+                ref={videoRef}
+                className="modal-media"
+                src={asset.media_url}
+                poster={asset.thumbnail_url ?? undefined}
+                controls
+                preload="metadata"
+              />
+            </div>
+          ) : asset.modality === "audio" && asset.media_url ? (
+            <div className="modal-preview">
+              <audio ref={audioRef} className="modal-media audio" src={asset.media_url} controls preload="metadata" />
+            </div>
+          ) : asset.thumbnail_url ? (
             <div className="modal-preview">
               <img src={asset.thumbnail_url} alt={asset.name} />
             </div>
+          ) : null}
+
+          {segments.length > 0 && (
+            <section className="modal-section">
+              <h3>转写片段 · 点击跳转</h3>
+              <div className="modal-segments">
+                {segments.map((s, i) => (
+                  <button
+                    key={`${s.start}-${i}`}
+                    type="button"
+                    className="moment-ref"
+                    onClick={() => seekTo(s.start)}
+                  >
+                    <span className="moment-time">
+                      {fmtTs(s.start)}
+                      {s.end != null ? `-${fmtTs(s.end)}` : ""}
+                    </span>
+                    <span className="moment-text">{s.text}</span>
+                  </button>
+                ))}
+              </div>
+            </section>
           )}
 
           {asset.error_message && (

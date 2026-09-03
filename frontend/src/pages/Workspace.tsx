@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, FolderGit, X } from "lucide-react";
+import { ArrowLeft, FolderGit, LogOut, UserCircle2, X } from "lucide-react";
 import {
+  clearAuth,
   deleteAsset,
+  getUser,
   fetchAssets,
   fetchAsset,
   fetchDomainProfile,
@@ -20,6 +22,7 @@ import SearchBar from "../components/SearchBar";
 import UploadPanel from "../components/UploadPanel";
 
 export default function Workspace() {
+  const [user] = useState(() => getUser());
   const [assets, setAssets] = useState<Asset[]>([]);
   const [total, setTotal] = useState(0);
   const [query, setQuery] = useState("");
@@ -190,6 +193,11 @@ export default function Workspace() {
 
   const closeModal = useCallback(() => setSelected(null), []);
 
+  const handleLogout = () => {
+    clearAuth();
+    window.location.reload();
+  };
+
   const hasFilter = Boolean(query.trim() || modality || tag || imageSearched);
 
   return (
@@ -201,6 +209,22 @@ export default function Workspace() {
         </Link>
         <span className="app-sub">上传什么，就长成什么的素材中心</span>
         <div className="header-right">
+          {user ? (
+            <>
+              <span className="user-chip" title="当前登录用户">
+                <UserCircle2 size={14} />
+                {user}
+              </span>
+              <button type="button" className="ghost-chip" onClick={handleLogout}>
+                <LogOut size={14} />
+                退出
+              </button>
+            </>
+          ) : (
+            <Link className="ghost-chip accent" to="/login">
+              登录
+            </Link>
+          )}
           <a
             className="ghost-chip"
             href="https://github.com/yerouguozi/multimodal-asset-agent"

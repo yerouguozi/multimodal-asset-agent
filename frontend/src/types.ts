@@ -20,6 +20,7 @@ export interface Asset {
   height: number | null;
   duration: number | null;
   thumbnail_url: string | null;
+  media_url?: string | null;
   error_message: string | null;
   created_at: string;
   tags: Tag[];
@@ -116,4 +117,17 @@ export interface ChatMessageRecord {
   role: string;
   content: string;
   created_at: string;
+}
+
+export interface TranscriptSegment {
+  start: number;
+  end?: number | null;
+  text: string;
+}
+
+export interface AssetSegments {
+  asset_id: number;
+  modality: string;
+  duration?: number | null;
+  segments: TranscriptSegment[];
 }

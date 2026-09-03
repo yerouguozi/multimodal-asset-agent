@@ -94,13 +94,17 @@ def search(
     tag: str | None = None,
     limit: int = 20,
     strategy: str = "full",
+    owner: str | None = None,
 ) -> list[tuple[Asset, float]]:
     """strategy: bm25=仅关键词 / rrf=关键词+向量 / full=再加重排（默认）。"""
     query = (query or "").strip()
     if not query:
         return []
 
-    assets = db.query(Asset).filter(Asset.status == "ready").all()
+    q = db.query(Asset).filter(Asset.status == "ready")
+    if owner:
+        q = q.filter(Asset.owner == owner)
+    assets = q.all()
     if modality:
         assets = [a for a in assets if a.modality == modality]
     if tag:

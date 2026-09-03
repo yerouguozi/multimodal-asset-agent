@@ -22,14 +22,16 @@ import json
 import time
 from collections.abc import Callable
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import func
 
 from ..agent.graph import agent_app
+from ..agent.tools import owner_ctx
 from ..core.database import SessionLocal
 from ..models import ChatMessage, ChatSession
+from .auth import resolve_owner
 
 router = APIRouter(prefix="/api", tags=["chat"])
 
@@ -45,8 +47,11 @@ def _sse(event: str, data: dict) -> str:
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
-def _load_history(session_id: str) -> list[dict]:
+def _load_history(session_id: str, owner: str = "local") -> list[dict]:
     with SessionLocal() as db:
+        session = db.query(ChatSession).filter(ChatSession.id == session_id, ChatSession.owner == owner).first()
+        if session is None:
+            return []
         rows = (
             db.query(ChatMessage)
             .filter(ChatMessage.session_id == session_id)
@@ -57,12 +62,13 @@ def _load_history(session_id: str) -> list[dict]:
     return [{"role": r.role, "content": r.content} for r in reversed(rows)]
 
 
-def _save_messages(session_id: str, messages: list[dict]) -> None:
+def _save_messages(session_id: str, messages: list[dict], owner: str = "local") -> None:
     with SessionLocal() as db:
-        if db.get(ChatSession, session_id) is None:
+        session = db.query(ChatSession).filter(ChatSession.id == session_id, ChatSession.owner == owner).first()
+        if session is None:
             # 首条用户消息作为会话标题（前台新建会话时传随机 id）
             first = next((m["content"] for m in messages if m["role"] == "user"), "")
-            db.add(ChatSession(id=session_id, title=(first or session_id)[:40]))
+            db.add(ChatSession(id=session_id, owner=owner, title=(first or session_id)[:40]))
         for m in messages:
             db.add(ChatMessage(session_id=session_id, role=m["role"], content=m["content"]))
         db.commit()
@@ -72,13 +78,14 @@ def run_agent(
     message: str,
     session_id: str,
     emit: Callable[[str, dict], None] | None = None,
+    owner: str = "local",
 ) -> tuple[str, list[dict], list[str]]:
     """同步执行 LangGraph 图，返回 (回答, 旧版步骤列表, 工具名列表)。
 
     传入 emit 后会在每个节点产出时同步回调（由调用方桥接到异步 SSE 队列），
     从而实现“跑一步推一步”的实时轨迹。
     """
-    history = _load_history(session_id)
+    history = _load_history(session_id, owner)
     input_state = {
         "messages": history + [{"role": "user", "content": message}],
         "plan": [],
@@ -93,67 +100,70 @@ def run_agent(
     tool_names: list[str] = []
     answer = ""
     last_ts = time.perf_counter()
-
-    for update in agent_app.stream(input_state, stream_mode="updates"):
-        now = time.perf_counter()
-        elapsed_ms = int((now - last_ts) * 1000)
-        last_ts = now
-        for node, data in update.items():
-            if node == "planner":
-                intent = data.get("intent", "")
-                plan = data.get("plan", [])
-                step_item = {"stage": "intent", "content": f"意图识别：{intent}"}
-                steps.append(step_item)
-                if emit:
-                    emit(
-                        "plan",
-                        {
-                            "intent": intent,
-                            "steps": [
-                                {"tool": s.get("tool"), "args": s.get("args", {})}
-                                for s in plan
-                            ],
-                            "elapsed_ms": elapsed_ms,
-                        },
-                    )
-                    emit("step", step_item)
-            elif node == "tool":
-                result = data.get("tool_result", {})
-                tool = data.get("tool_used")
-                summary = result.get("summary", "")
-                step_item = {"stage": "tool", "content": summary}
-                steps.append(step_item)
-                if tool:
-                    tool_names.append(tool)
-                if emit:
-                    emit(
-                        "tool",
-                        {
-                            "tool": tool,
-                            "ok": bool(result.get("ok")),
-                            "summary": summary,
-                            "assets": result.get("assets", []),
-                            "moments": result.get("moments", []),
-                            "labels": result.get("labels", []),
-                            "by_modality": result.get("by_modality", {}),
-                            "elapsed_ms": elapsed_ms,
-                        },
-                    )
-                    emit("step", step_item)
-            elif node == "answer":
-                answer = data.get("answer", "")
+    token = owner_ctx.set(owner)
+    try:
+        for update in agent_app.stream(input_state, stream_mode="updates"):
+            now = time.perf_counter()
+            elapsed_ms = int((now - last_ts) * 1000)
+            last_ts = now
+            for node, data in update.items():
+                if node == "planner":
+                    intent = data.get("intent", "")
+                    plan = data.get("plan", [])
+                    step_item = {"stage": "intent", "content": f"意图识别：{intent}"}
+                    steps.append(step_item)
+                    if emit:
+                        emit(
+                            "plan",
+                            {
+                                "intent": intent,
+                                "steps": [
+                                    {"tool": s.get("tool"), "args": s.get("args", {})}
+                                    for s in plan
+                                ],
+                                "elapsed_ms": elapsed_ms,
+                            },
+                        )
+                        emit("step", step_item)
+                elif node == "tool":
+                    result = data.get("tool_result", {})
+                    tool = data.get("tool_used")
+                    summary = result.get("summary", "")
+                    step_item = {"stage": "tool", "content": summary}
+                    steps.append(step_item)
+                    if tool:
+                        tool_names.append(tool)
+                    if emit:
+                        emit(
+                            "tool",
+                            {
+                                "tool": tool,
+                                "ok": bool(result.get("ok")),
+                                "summary": summary,
+                                "assets": result.get("assets", []),
+                                "moments": result.get("moments", []),
+                                "labels": result.get("labels", []),
+                                "by_modality": result.get("by_modality", {}),
+                                "elapsed_ms": elapsed_ms,
+                            },
+                        )
+                        emit("step", step_item)
+                elif node == "answer":
+                    answer = data.get("answer", "")
+    finally:
+        owner_ctx.reset(token)
     if answer:
         if emit:
             emit("answer", {"text": answer})
         _save_messages(session_id, [
             {"role": "user", "content": message},
             {"role": "assistant", "content": answer},
-        ])
+        ], owner)
     return answer, steps, tool_names
 
 
 @router.post("/chat")
-async def chat(req: ChatRequest):
+async def chat(req: ChatRequest, owner: str = Depends(resolve_owner)):
     message = (req.message or "").strip()
     session_id = req.session_id or "default"
 
@@ -172,7 +182,7 @@ async def chat(req: ChatRequest):
 
         async def worker() -> None:
             try:
-                await asyncio.to_thread(run_agent, message, session_id, emit)
+                await asyncio.to_thread(run_agent, message, session_id, emit, owner)
             except Exception as e:  # noqa: BLE001 - 网络边界，需兜底
                 emit("error", {"text": f"Agent 执行失败：{e}"})
             finally:
@@ -198,10 +208,16 @@ async def chat(req: ChatRequest):
 
 
 @router.get("/chat/sessions")
-def list_sessions():
+def list_sessions(owner: str = Depends(resolve_owner)):
     """会话列表（含消息数与最后一条消息，按最近活跃排序）。"""
     with SessionLocal() as db:
-        sessions = db.query(ChatSession).order_by(ChatSession.created_at.desc()).limit(50).all()
+        sessions = (
+            db.query(ChatSession)
+            .filter(ChatSession.owner == owner)
+            .order_by(ChatSession.created_at.desc())
+            .limit(50)
+            .all()
+        )
         out = []
         for s in sessions:
             count = (
@@ -230,9 +246,17 @@ def list_sessions():
 
 
 @router.get("/chat/sessions/{session_id}/messages")
-def get_session_messages(session_id: str):
+def get_session_messages(
+    session_id: str,
+    owner: str = Depends(resolve_owner),
+):
     with SessionLocal() as db:
-        if db.get(ChatSession, session_id) is None:
+        session = (
+            db.query(ChatSession)
+            .filter(ChatSession.id == session_id, ChatSession.owner == owner)
+            .first()
+        )
+        if session is None:
             raise HTTPException(status_code=404, detail="会话不存在")
         rows = (
             db.query(ChatMessage)

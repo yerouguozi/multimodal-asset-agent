@@ -12,6 +12,7 @@ from ..models import Asset
 from ..retrieval import search as search_service
 from ..retrieval.vector_store import vector_store
 from ..schemas import AssetOut, SearchHit, SearchResponse
+from .auth import resolve_owner
 
 router = APIRouter(prefix="/api/search", tags=["search"])
 
@@ -23,15 +24,21 @@ def search(
     tag: str | None = None,
     limit: int = 20,
     db: Session = Depends(get_db),
+    owner: str = Depends(resolve_owner),
 ):
-    hits = search_service.search(db, q, modality=modality, tag=tag, limit=limit)
+    hits = search_service.search(db, q, modality=modality, tag=tag, limit=limit, owner=owner)
     return SearchResponse(
         query=q,
         hits=[SearchHit(asset=AssetOut.model_validate(a), score=round(s, 4)) for a, s in hits],
     )
 
 @router.post("/image")
-async def search_by_image(file: UploadFile = File(...), limit: int = 20, db: Session = Depends(get_db)):
+async def search_by_image(
+    file: UploadFile = File(...),
+    limit: int = 20,
+    db: Session = Depends(get_db),
+    owner: str = Depends(resolve_owner),
+):
     """以图搜图：上传参考图，按视觉相似度检索。"""
     content = await file.read()
     if not content:
@@ -43,19 +50,25 @@ async def search_by_image(file: UploadFile = File(...), limit: int = 20, db: Ses
     hits = vector_store.search(vec, settings.vl_embedding_model, top_k=limit)
     out = []
     for aid, score in hits.items():
-        asset = db.get(Asset, aid)
+        asset = db.query(Asset).filter(Asset.id == aid, Asset.owner == owner).first()
         if asset:
             out.append({"asset": AssetOut.model_validate(asset), "score": round(score, 4)})
     return {"hits": out}
 
 
 @router.get("/transcript")
-def search_transcript(q: str, modality: str | None = None, limit: int = 10, db: Session = Depends(get_db)):
+def search_transcript(
+    q: str,
+    modality: str | None = None,
+    limit: int = 10,
+    db: Session = Depends(get_db),
+    owner: str = Depends(resolve_owner),
+):
     """在音频/视频转写片段里定位关键词，返回时间戳（找"说过某段话"）。"""
     q = (q or "").strip()
     if not q:
         raise HTTPException(400, "q 不能为空")
-    assets = db.query(Asset).filter(Asset.status == "ready").all()
+    assets = db.query(Asset).filter(Asset.status == "ready", Asset.owner == owner).all()
     if modality:
         assets = [a for a in assets if a.modality == modality]
     hits = []

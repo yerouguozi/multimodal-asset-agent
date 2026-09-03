@@ -30,6 +30,7 @@ class AssetOut(BaseModel):
     height: int | None = None
     duration: float | None = None
     thumbnail_url: str | None = None
+    media_url: str | None = None
     error_message: str | None = None
     created_at: datetime
     tags: list[TagOut] = []

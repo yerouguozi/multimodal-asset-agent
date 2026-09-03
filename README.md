@@ -14,6 +14,8 @@ LangGraph 素材助理 Agent 帮你搜素材、生成素材、处理素材、总
 - **领域自适应**：分类体系不写死，标签聚合 + LLM 洞察自动生成"我的素材库是什么领域"
 - **素材助理 Agent**：LangGraph 任务规划（LLM 结构化参数）→ 多步工具循环 → 组织回答，SSE 逐步推送；支持检索、详情、画像、文生图入库、素材处理、会话记忆落库
 - **执行轨迹可观测**：Agent 每跑一步实时推送 plan / tool 结构化事件（工具名、耗时、命中素材、片段时间戳），前端渲染成可点击的轨迹卡片；会话记忆支持列表 / 历史回看 / 多会话切换
+- **多用户隔离**：JWT 登录后素材 / 检索 / 领域画像 / Agent 会话全部按 owner 隔离（未登录自动降级为 local 访客，方便本地体验）；媒体文件经 /media 直接可播放
+- **评测仪表盘**：/eval 页把 45×5 检索评测量化对比与结论可视化，数据与 docs/eval-reports 同源
 - **进阶检索**：以图搜图（VL 图片向量）、音视频转写片段时间戳检索（"找我说过 XX 的那一段"）
 - **成本意识**：简单图片走 Qwen3-VL-8B、复杂走 32B 的模型路由；每次模型调用记入 UsageLog，前端实时显示估算成本
 - **可评测**：自建 24 素材/39 查询评测集，三种检索策略量化对比（见下方）
@@ -49,7 +51,7 @@ LangGraph 素材助理 Agent 帮你搜素材、生成素材、处理素材、总
 | 多模态 | SiliconFlow：Qwen3-VL（视觉/路由）/ SenseVoice（转写）/ Qwen-Image（文生图）/ bge-m3 / bge-reranker |
 | 检索 | 自实现 BM25 · RRF 融合 · 重排 · Recall@k/MRR/NDCG 评测 |
 | 前端 | React 18 · Vite · TypeScript · Nginx |
-| 测试/CI | pytest（66 用例）· GitHub Actions |
+| 测试/CI | pytest（69 用例）· GitHub Actions |
 | 部署 | Docker Compose（backend + frontend/nginx） |
 
 ## 架构
@@ -142,7 +144,7 @@ cd backend
 │   │   ├── llm/         # 多模态客户端（降级/重试/路由）
 │   │   └── core/        # 配置 / 数据库
 │   ├── scripts/         # 实测 / 演示 / 评测
-│   └── tests/           # 66 个 pytest 用例（LLM 全 mock）
+│   └── tests/           # 69 个 pytest 用例（LLM 全 mock）
 ├── frontend/            # React + Vite + TS
 ├── docs/eval-reports/   # 检索评测报告
 └── docker-compose.yml

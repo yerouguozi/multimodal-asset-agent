@@ -34,6 +34,7 @@ class Asset(Base):
     __tablename__ = "assets"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    owner: Mapped[str] = mapped_column(String(64), default="local", index=True)
     name: Mapped[str] = mapped_column(String(255))
     original_filename: Mapped[str] = mapped_column(String(255))
     modality: Mapped[str] = mapped_column(String(20), index=True)
@@ -73,6 +74,10 @@ class Asset(Base):
     def thumbnail_url(self) -> str | None:
         return f"/media/{self.thumbnail_path}" if self.thumbnail_path else None
 
+    @property
+    def media_url(self) -> str | None:
+        return f"/media/{self.storage_path}" if self.storage_path else None
+
 
 class Tag(Base):
     __tablename__ = "tags"
@@ -106,6 +111,7 @@ class ChatSession(Base):
     __tablename__ = "chat_sessions"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    owner: Mapped[str] = mapped_column(String(64), default="local", index=True)
     title: Mapped[str] = mapped_column(String(200), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 

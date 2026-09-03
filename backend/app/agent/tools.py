@@ -5,10 +5,14 @@
 """
 from __future__ import annotations
 
+from contextvars import ContextVar
+
 from ..core.database import SessionLocal
 from ..domain.profile import build_profile
 from ..models import Asset, Tag
 from ..retrieval import search as search_service
+
+owner_ctx: ContextVar[str] = ContextVar("asset_owner", default="local")
 
 TOOL_DESCRIPTIONS: list[dict] = [
     {"name": "search_assets", "description": "按自然语言跨模态检索素材库，返回最相关的素材列表。", "params": {"query": "检索词"}},
@@ -32,7 +36,7 @@ def _asset_brief(asset: Asset) -> dict:
 
 def search_assets(query: str, limit: int = 5) -> dict:
     with SessionLocal() as db:
-        hits = search_service.search(db, query, limit=limit)
+        hits = search_service.search(db, query, limit=limit, owner=owner_ctx.get())
         assets = [_asset_brief(a) for a, _ in hits]
     return {
         "ok": True,
@@ -43,7 +47,11 @@ def search_assets(query: str, limit: int = 5) -> dict:
 
 def get_asset_detail(asset_id: int) -> dict:
     with SessionLocal() as db:
-        asset = db.get(Asset, asset_id)
+        asset = (
+            db.query(Asset)
+            .filter(Asset.id == asset_id, Asset.owner == owner_ctx.get())
+            .first()
+        )
         if asset is None:
             return {"ok": False, "summary": f"素材 #{asset_id} 不存在", "assets": []}
         return {
@@ -62,7 +70,7 @@ def get_asset_detail(asset_id: int) -> dict:
 
 def domain_profile() -> dict:
     with SessionLocal() as db:
-        p = build_profile(db)
+        p = build_profile(db, owner=owner_ctx.get())
     return {
         "ok": True,
         "summary": p.summary,
@@ -104,6 +112,7 @@ def generate_image(prompt: str) -> dict:
         import hashlib
 
         asset = Asset(
+            owner=owner_ctx.get(),
             name=stem,
             original_filename=f"{stem}.png",
             modality="image",
@@ -146,7 +155,11 @@ def transform_asset(asset_id: int, operation: str, params: dict | None = None) -
 
     params = params or {}
     with SessionLocal() as db:
-        src = db.get(Asset, asset_id)
+        src = (
+            db.query(Asset)
+            .filter(Asset.id == asset_id, Asset.owner == owner_ctx.get())
+            .first()
+        )
         if src is None:
             return {"ok": False, "summary": f"素材 #{asset_id} 不存在", "assets": []}
         if operation not in SUPPORTED_OPERATIONS.get(src.modality, []):
@@ -161,13 +174,18 @@ def transform_asset(asset_id: int, operation: str, params: dict | None = None) -
     rel_path = f"processed/{out.name}"
     data = out.read_bytes()
     with SessionLocal() as db:
-        src = db.get(Asset, asset_id)  # 重新取，避免跨会话懒加载
+        src = (
+            db.query(Asset)
+            .filter(Asset.id == asset_id, Asset.owner == owner_ctx.get())
+            .first()
+        )
         if src is None:
             return {"ok": False, "summary": f"素材 #{asset_id} 不存在", "assets": []}
         width, height = (None, None)
         if src.modality == "image":
             width, height = image_size(out)
         new = Asset(
+            owner=owner_ctx.get(),
             name=f"{src.name}_{operation}",
             original_filename=out.name,
             modality=src.modality,
@@ -209,7 +227,11 @@ def find_moment(query: str) -> dict:
     import json as _json
 
     with SessionLocal() as db:
-        assets = db.query(Asset).filter(Asset.status == "ready").all()
+        assets = (
+            db.query(Asset)
+            .filter(Asset.status == "ready", Asset.owner == owner_ctx.get())
+            .all()
+        )
         moments = []
         for a in assets:
             try:

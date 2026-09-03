@@ -3400,3 +3400,362 @@ input:-webkit-autofill:focus {
     max-width: 100%;
   }
 }
+
+/* =========================================================
+   v4 多用户 + 播放器 + 评测页
+   ========================================================= */
+
+.ghost-chip.accent {
+  color: #cfe0ff;
+  border-color: rgba(122, 166, 255, 0.42);
+  background: rgba(79, 124, 255, 0.1);
+}
+
+button.ghost-chip {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.user-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 13px;
+  border-radius: 999px;
+  border: 1px solid rgba(52, 211, 153, 0.3);
+  background: rgba(16, 185, 129, 0.08);
+  color: #6ee7b7;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+/* 登录页 */
+.login-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  position: relative;
+}
+
+.login-back {
+  position: absolute;
+  top: 22px;
+  left: 24px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 13px;
+  transition: color 0.15s ease;
+}
+
+.login-back:hover {
+  color: var(--text);
+}
+
+.login-card {
+  width: min(420px, 100%);
+  padding: 38px 34px 30px;
+  border-radius: 22px;
+  border: 1px solid var(--border-strong);
+  background:
+    radial-gradient(400px 180px at 50% 0%, rgba(79, 124, 255, 0.09), transparent 70%),
+    rgba(11, 18, 34, 0.9);
+  box-shadow: 0 36px 90px rgba(0, 0, 0, 0.45);
+}
+
+.login-logo {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: linear-gradient(135deg, #4f7cff, #8b5cf6);
+  box-shadow: 0 12px 28px rgba(99, 102, 241, 0.35);
+  margin-bottom: 18px;
+}
+
+.login-card h1 {
+  margin: 0;
+  font-size: 24px;
+  letter-spacing: -0.02em;
+}
+
+.login-sub {
+  margin: 9px 0 22px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.login-card form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.login-card label {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  color: #aebed8;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.login-card .text-input {
+  width: 100%;
+  padding: 12px 14px;
+  font-size: 14px;
+}
+
+.login-error {
+  margin: 0;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #fca5a5;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.login-submit {
+  margin-top: 4px;
+  padding: 13px;
+  border-radius: 12px;
+  font-size: 14px;
+}
+
+.login-switch {
+  margin: 20px auto 0;
+  display: block;
+  border: 0;
+  background: none;
+  color: #8ea8d8;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.login-switch:hover {
+  color: #cfe0ff;
+}
+
+/* 媒体播放器 */
+.modal-media {
+  display: block;
+  width: 100%;
+  max-height: 380px;
+  border-radius: 13px;
+  background: #050810;
+  border: 1px solid var(--border);
+}
+
+.modal-media.audio {
+  padding: 16px;
+  background: rgba(4, 8, 18, 0.7);
+}
+
+.modal-segments {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 220px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* 评测页 */
+.eval-page {
+  min-height: 100vh;
+}
+
+.eval-nav {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 13px 24px;
+  background: rgba(5, 7, 13, 0.72);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--border);
+}
+
+.eval-empty {
+  padding: 90px 24px;
+  text-align: center;
+  color: var(--muted);
+}
+
+.eval-main {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 64px 24px 90px;
+}
+
+.eval-hero {
+  text-align: center;
+}
+
+.eval-hero .eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.eval-hero h1 {
+  margin: 0;
+  font-size: clamp(30px, 4.5vw, 48px);
+  letter-spacing: -0.03em;
+}
+
+.eval-hero p {
+  margin: 14px auto 0;
+  max-width: 620px;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+.eval-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-top: 48px;
+}
+
+.eval-table-wrap,
+.eval-insights {
+  margin-top: 58px;
+}
+
+.eval-table-wrap h2,
+.eval-insights h2 {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0 0 18px;
+  font-size: 20px;
+}
+
+.eval-table {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.ev-row {
+  display: grid;
+  grid-template-columns: 2fr repeat(5, 1fr);
+  gap: 8px;
+  padding: 12px 16px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  border-top: 1px solid var(--border);
+}
+
+.ev-row:first-child {
+  border-top: 0;
+}
+
+.ev-row.head {
+  background: rgba(148, 163, 184, 0.06);
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.ev-name {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: #d7e1f2;
+  font-weight: 600;
+}
+
+.ev-name i {
+  font-style: normal;
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 800;
+  color: #c4b5fd;
+  background: rgba(139, 92, 246, 0.16);
+  border: 1px solid rgba(139, 92, 246, 0.3);
+}
+
+.eval-best-note {
+  margin: 14px 0 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.7;
+}
+
+.eval-insights ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.eval-insights li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 13px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: rgba(10, 15, 28, 0.55);
+  color: #cdd9ec;
+  font-size: 13.5px;
+  line-height: 1.7;
+}
+
+.eval-insights li svg {
+  color: var(--ok);
+  flex-shrink: 0;
+  margin-top: 3px;
+}
+
+.eval-consistency {
+  margin: 22px 0 0;
+  padding: 15px 18px;
+  border-radius: 12px;
+  border: 1px solid rgba(34, 211, 238, 0.25);
+  background: rgba(34, 211, 238, 0.06);
+  color: #a5f3fc;
+  font-size: 13px;
+  line-height: 1.75;
+}
+
+@media (max-width: 720px) {
+  .eval-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .ev-row {
+    grid-template-columns: 1.4fr repeat(5, 1fr);
+    padding: 10px 10px;
+    font-size: 11.5px;
+    gap: 4px;
+  }
+
+  .login-card {
+    padding: 30px 22px 24px;
+  }
+}

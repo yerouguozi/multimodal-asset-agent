@@ -28,8 +28,11 @@ class DomainProfile:
     summary: str = ""
 
 
-def build_profile(db: Session) -> DomainProfile:
-    assets = db.query(Asset).filter(Asset.status == "ready").all()
+def build_profile(db: Session, owner: str | None = None) -> DomainProfile:
+    q = db.query(Asset).filter(Asset.status == "ready")
+    if owner:
+        q = q.filter(Asset.owner == owner)
+    assets = q.all()
     profile = DomainProfile(total=len(assets))
 
     counts: Counter[str] = Counter(a.modality for a in assets)
