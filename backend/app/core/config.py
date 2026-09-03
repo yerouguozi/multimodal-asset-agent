@@ -106,6 +106,12 @@ class Settings(BaseSettings):
         p.parent.mkdir(parents=True, exist_ok=True)
         return p
 
+    @property
+    def chunk_vector_file(self) -> Path:
+        """片段向量库独立于素材向量库（同一 data 目录，文件名错开）。"""
+        f = self.vector_store_file
+        return f.with_name(f"{f.stem}_chunks.npz")
+
 
 @lru_cache
 def get_settings() -> Settings:

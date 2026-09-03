@@ -18,7 +18,7 @@ LangGraph 素材助理 Agent 帮你搜素材、生成素材、处理素材、总
 - **评测仪表盘**：/eval 页把 45×5 检索评测量化对比与结论可视化，数据与 docs/eval-reports 同源
 - **可靠性工程**：Agent 回答做引用校验（#id 必须来自本轮工具结果，防幻觉硬规则）；API / Agent 检索全量落日志，/api/metrics/search 输出平均与 P95 延迟、策略/来源分布、高频查询与最近明细；/metrics 前端仪表盘可视化
 - **进阶检索**：以图搜图（VL 图片向量）、音视频转写片段时间戳检索（"找我说过 XX 的那一段"）
-- **片段级检索（长文档 RAG）**：文档按段落感知 + 重叠自动分块入库；/api/search/passages 在 chunk 上做 BM25 + 重排，返回原文与出处；旧文档首次查询自动补分块
+- **片段级检索（长文档 RAG）**：文档按段落感知 + 重叠自动分块入库并逐块 bge-m3 向量化；/api/search/passages 在 chunk 上做 BM25 + 向量 RRF 融合 + 重排精排，返回原文与出处；旧文档首次查询自动补分块与向量
 - **成本意识**：简单图片走 Qwen3-VL-8B、复杂走 32B 的模型路由；每次模型调用记入 UsageLog，前端实时显示估算成本
 - **可评测**：自建 24 素材/39 查询评测集，三种检索策略量化对比（见下方）
 
@@ -53,7 +53,7 @@ LangGraph 素材助理 Agent 帮你搜素材、生成素材、处理素材、总
 | 多模态 | SiliconFlow：Qwen3-VL（视觉/路由）/ SenseVoice（转写）/ Qwen-Image（文生图）/ bge-m3 / bge-reranker |
 | 检索 | 自实现 BM25 · RRF 融合 · 重排 · Recall@k/MRR/NDCG 评测 |
 | 前端 | React 18 · Vite · TypeScript · Nginx |
-| 测试/CI | pytest（80 用例）· GitHub Actions |
+| 测试/CI | pytest（81 用例）· GitHub Actions |
 | 部署 | Docker Compose（backend + frontend/nginx） |
 
 ## 架构
@@ -149,7 +149,7 @@ cd backend
 │   │   ├── llm/         # 多模态客户端（降级/重试/路由）
 │   │   └── core/        # 配置 / 数据库
 │   ├── scripts/         # 实测 / 演示 / 评测
-│   └── tests/           # 80 个 pytest 用例（LLM 全 mock）
+│   └── tests/           # 81 个 pytest 用例（LLM 全 mock）
 ├── frontend/            # React + Vite + TS
 ├── docs/eval-reports/   # 检索评测报告
 └── docker-compose.yml

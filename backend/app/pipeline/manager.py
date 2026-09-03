@@ -16,6 +16,7 @@ from ..core.database import SessionLocal
 from ..llm.client import client as llm_client
 from ..models import Asset, DocumentChunk, IngestionJob, Tag
 from ..retrieval.vector_store import vector_store
+from ..retrieval.chunk_vector import chunk_vector_store
 from .chunking import chunk_text
 from .processors import build_embed_text, resolve_processor
 from ..usage import record_usage
@@ -106,6 +107,7 @@ class IngestionManager:
                     embed_text = build_embed_text(result)
 
                 # 长文档分块（段落感知 + 重叠；全文 embedding 之外提供片段级出处）
+                chunk_rows: list[DocumentChunk] = []
                 if modality == "document" and result.text_content:
                     with SessionLocal() as db:
                         asset = db.get(Asset, asset_id)
@@ -115,6 +117,24 @@ class IngestionManager:
                         for seq, text in enumerate(chunk_text(result.text_content)):
                             db.add(DocumentChunk(asset_id=asset_id, seq=seq, text=text))
                         db.commit()
+                        chunk_rows = (
+                            db.query(DocumentChunk)
+                            .filter(DocumentChunk.asset_id == asset_id)
+                            .order_by(DocumentChunk.seq.asc())
+                            .all()
+                        )
+
+                # 片段向量化（bge-m3；失败仅降级关键词片段检索，不影响入库）
+                if chunk_rows:
+                    try:
+                        texts = [c.text for c in chunk_rows]
+                        vecs = await asyncio.to_thread(llm_client.embed_texts, texts)
+                        if vecs:
+                            for c, v in zip(chunk_rows, vecs):
+                                chunk_vector_store.add(c.id, v, settings.embedding_model)
+                            record_usage(asset_id, settings.embedding_model, "chunk_embed")
+                    except Exception as e:
+                        logger.warning("片段向量化失败（已降级）asset_id=%s: %s", asset_id, e)
 
                 # 向量化（有 Key 才做；失败不影响入库）
                 if embed_text:

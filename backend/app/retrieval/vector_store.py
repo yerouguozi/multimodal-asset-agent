@@ -33,6 +33,9 @@ class LocalVectorStore:
     def models(self) -> list[str]:
         return list(self._spaces.keys())
 
+    def keys(self, model: str) -> set[int]:
+        return set(self._spaces.get(model, {}).keys())
+
     def add(self, asset_id: int, vector: list[float], model: str) -> None:
         self._spaces.setdefault(model, {})[asset_id] = np.asarray(vector, dtype=np.float32)
         self._save(model)

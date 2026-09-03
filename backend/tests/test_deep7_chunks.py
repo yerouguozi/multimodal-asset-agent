@@ -1,9 +1,14 @@
 """深度七期测试：长文档分块入库 + 片段级检索（出处）+ Agent 片段工具。"""
+import hashlib
 
 from app.agent.tools import find_passage
+from app.core.config import settings
 from app.core.database import SessionLocal
+from app.llm.client import client as llm_client
 from app.models import Asset, DocumentChunk
 from app.pipeline.chunking import chunk_text
+from app.retrieval.bm25 import tokenize
+from app.retrieval.chunk_vector import chunk_vector_store
 
 LONG_DOC = (
     "第一段：本文介绍多模态素材中心的产品定位与整体架构，面向设计师与内容团队，"
@@ -97,3 +102,24 @@ def test_agent_find_passage_tool(client):
     assert result["assets"]
     assert result["passages"][0]["name"] == "长文档"
     assert "片段级检索" in result["passages"][0]["text"]
+
+
+def _bag_vectors(texts: list[str]) -> list[list[float]]:
+    out = []
+    for t in texts:
+        v = [0.0] * 64
+        for tok in tokenize(t):
+            v[hashlib.md5(tok.encode("utf-8")).digest()[0] % 64] = 1.0
+        out.append(v)
+    return out
+
+
+def test_chunk_vectors_embedded_and_used_in_passages(client, monkeypatch):
+    monkeypatch.setattr(llm_client, "embed_texts", _bag_vectors)
+    _upload_doc(client, "苹果是一种常见水果，富含维生素与膳食纤维。\n\n食用苹果有助于保持健康。")
+    _upload_doc(client, "香蕉种植需要温暖湿润的气候。\n\n采收后需要尽快冷链运输。")
+
+    assert len(chunk_vector_store.keys(settings.embedding_model)) >= 2
+    hits = client.get("/api/search/passages", params={"q": "苹果", "rerank": "false"}).json()["hits"]
+    assert hits
+    assert "苹果" in hits[0]["text"]

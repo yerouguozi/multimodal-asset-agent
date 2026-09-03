@@ -17,6 +17,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 from app.core.database import Base, engine  # noqa: E402
 from app.main import app  # noqa: E402
 from app.retrieval.vector_store import vector_store  # noqa: E402
+from app.retrieval.chunk_vector import chunk_vector_store  # noqa: E402
 from app import models  # noqa: E402,F401
 
 
@@ -25,6 +26,7 @@ def clean_state():
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
     vector_store.clear()
+    chunk_vector_store.clear()
     yield
 
 
