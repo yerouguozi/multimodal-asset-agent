@@ -1,6 +1,7 @@
 import type { ComponentType } from "react";
 import {
   Eye,
+  Download,
   FileText,
   Film,
   Image as ImageIcon,
@@ -155,18 +156,31 @@ export default function AssetGrid({
               )}
               <div className="asset-meta">
                 <span className="asset-time">{timeAgoZh(a.created_at) && `上传于 ${timeAgoZh(a.created_at)}`}</span>
-                <button
-                  className="asset-delete"
-                  aria-label={`删除素材 #${a.id} ${a.name}`}
-                  title="删除素材"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDelete(a.id);
-                  }}
-                >
-                  <Trash2 size={13} />
-                  删除
-                </button>
+                <span className="asset-actions">
+                  {a.media_url && (
+                    <a
+                      className="asset-action"
+                      href={a.media_url}
+                      download={a.original_filename || a.name}
+                      aria-label={`下载素材 #${a.id} ${a.name}`}
+                      title="下载原文件"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <Download size={13} />
+                    </a>
+                  )}
+                  <button
+                    className="asset-action danger"
+                    aria-label={`删除素材 #${a.id} ${a.name}`}
+                    title="删除素材"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDelete(a.id);
+                    }}
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </span>
               </div>
             </div>
           </article>

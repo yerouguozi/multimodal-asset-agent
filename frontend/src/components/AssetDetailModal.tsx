@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { ComponentType } from "react";
 import {
   Clock,
+  Download,
   FileText,
   Film,
   HardDrive,
@@ -287,6 +288,16 @@ export default function AssetDetailModal({ asset, initialSeek, onClose, onDelete
         </div>
 
         <footer className="modal-foot">
+          {asset.media_url && (
+            <a
+              className="btn soft"
+              href={asset.media_url}
+              download={asset.original_filename || asset.name}
+            >
+              <Download size={14} />
+              下载原文件
+            </a>
+          )}
           <button type="button" className="btn soft" onClick={onClose}>
             关闭
           </button>
