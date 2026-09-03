@@ -58,6 +58,7 @@ const TOOL_META: Record<
   generate_image: { label: "文生图入库", Icon: ImageIcon },
   transform_asset: { label: "素材处理", Icon: SlidersHorizontal },
   find_moment: { label: "片段定位", Icon: Timer },
+  find_passage: { label: "片段检索", Icon: FileText },
 };
 
 function fmtTs(sec?: number): string {

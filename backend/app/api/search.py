@@ -11,6 +11,7 @@ from ..core.database import get_db
 from ..llm.client import client as llm_client
 from ..models import Asset
 from ..retrieval import search as search_service
+from ..retrieval.passage import search_passages
 from ..retrieval.search_log import record_search
 from ..retrieval.vector_store import vector_store
 from ..schemas import AssetOut, SearchHit, SearchResponse
@@ -107,3 +108,27 @@ def search_transcript(
                     "snippet": text[:150],
                 })
     return {"query": q, "hits": hits[:limit]}
+
+
+@router.get("/passages")
+def search_document_passages(
+    q: str,
+    limit: int = 8,
+    rerank: bool = True,
+    db: Session = Depends(get_db),
+    owner: str = Depends(resolve_owner),
+):
+    """片段级检索：命中长文档中的具体段落，返回原文与出处。"""
+    t0 = time.perf_counter()
+    hits = search_passages(db, q, owner=owner, limit=min(limit, 20), rerank=rerank)
+    record_search(
+        db,
+        owner=owner,
+        query=q,
+        source="passage",
+        strategy="passage",
+        hits_count=len(hits),
+        latency_ms=int((time.perf_counter() - t0) * 1000),
+        top_ids=[h["asset_id"] for h in hits],
+    )
+    return {"query": q, "hits": hits}

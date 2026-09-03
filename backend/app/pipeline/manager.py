@@ -14,8 +14,9 @@ from pathlib import Path
 from ..core.config import settings
 from ..core.database import SessionLocal
 from ..llm.client import client as llm_client
-from ..models import Asset, IngestionJob, Tag
+from ..models import Asset, DocumentChunk, IngestionJob, Tag
 from ..retrieval.vector_store import vector_store
+from .chunking import chunk_text
 from .processors import build_embed_text, resolve_processor
 from ..usage import record_usage
 
@@ -103,6 +104,17 @@ class IngestionManager:
                     job.status = "done"
                     db.commit()
                     embed_text = build_embed_text(result)
+
+                # 长文档分块（段落感知 + 重叠；全文 embedding 之外提供片段级出处）
+                if modality == "document" and result.text_content:
+                    with SessionLocal() as db:
+                        asset = db.get(Asset, asset_id)
+                        if asset is None:
+                            return
+                        db.query(DocumentChunk).filter(DocumentChunk.asset_id == asset_id).delete()
+                        for seq, text in enumerate(chunk_text(result.text_content)):
+                            db.add(DocumentChunk(asset_id=asset_id, seq=seq, text=text))
+                        db.commit()
 
                 # 向量化（有 Key 才做；失败不影响入库）
                 if embed_text:

@@ -174,3 +174,15 @@ class SearchLog(Base):
     latency_ms: Mapped[int] = mapped_column(Integer, default=0)
     top_ids: Mapped[str] = mapped_column(Text, default="[]")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class DocumentChunk(Base):
+    """长文档分块（段落感知 + 重叠），支撑片段级检索与原文出处。"""
+
+    __tablename__ = "document_chunks"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    asset_id: Mapped[int] = mapped_column(ForeignKey("assets.id"), index=True)
+    seq: Mapped[int] = mapped_column(Integer, default=0)
+    text: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)

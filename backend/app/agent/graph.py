@@ -23,6 +23,7 @@ _TOOL_INTENT = {
     "generate_image": "generate",
     "transform_asset": "transform",
     "find_moment": "moment",
+    "find_passage": "passage",
 }
 
 PLANNER_PROMPT = (
@@ -72,6 +73,11 @@ def _rule_intent(text: str) -> dict:
         m = re.search(r"#?\s*(\d+)", text)
         if m:
             return {"intent": "detail", "asset_id": int(m.group(1))}
+    if (
+        any(k in text for k in ("片段", "出处", "摘录", "哪一段", "长文", "文档里"))
+        or re.search(r"第\s*[0-9一二三四五六七八九十百]+\s*段", text)
+    ):
+        return {"intent": "passage", "query": text}
     if any(k in text for k in ("搜", "找", "查", "有哪些", "有没有", "素材", "图")):
         return {"intent": "search", "query": text}
     return {"intent": "chitchat"}
@@ -111,6 +117,8 @@ def _rule_plan(text: str) -> list[dict]:
         return [{"tool": "domain_profile", "args": {}}]
     if intent == "moment":
         return [{"tool": "find_moment", "args": {"query": text}}]
+    if intent == "passage":
+        return [{"tool": "find_passage", "args": {"query": text}}]
     if intent == "generate":
         return [{"tool": "generate_image", "args": {"prompt": _clean_prompt(text)}}]
     if intent == "transform":
@@ -172,6 +180,8 @@ def tool_node(state: AgentState) -> dict:
             )
         elif tool == "find_moment":
             result = TOOL_REGISTRY["find_moment"](args.get("query", ""))
+        elif tool == "find_passage":
+            result = TOOL_REGISTRY["find_passage"](args.get("query", ""))
         else:
             result = {"ok": False, "summary": f"未知工具 {tool}", "assets": []}
     except Exception as e:

@@ -12,6 +12,7 @@ from ..core.database import SessionLocal
 from ..domain.profile import build_profile
 from ..models import Asset, Tag
 from ..retrieval import search as search_service
+from ..retrieval.passage import search_passages
 from ..retrieval.search_log import record_search
 
 owner_ctx: ContextVar[str] = ContextVar("asset_owner", default="local")
@@ -23,6 +24,7 @@ TOOL_DESCRIPTIONS: list[dict] = [
     {"name": "generate_image", "description": "根据描述生成一张图片并自动入库。", "params": {"prompt": "画面描述"}},
     {"name": "transform_asset", "description": "处理已有素材（压缩/缩放/转格式），生成新版本入库。", "params": {"asset_id": "素材编号", "operation": "compress|resize|convert", "params": "参数"}},
     {"name": "find_moment", "description": "在音频/视频的转写片段里定位关键词，返回时间戳（用于找\"说过某段话\"）。", "params": {"query": "关键词"}},
+    {"name": "find_passage", "description": "在长文档里定位相关原文段落（片段级检索），返回出处与原文。", "params": {"query": "检索词"}},
 ]
 
 
@@ -268,6 +270,35 @@ def find_moment(query: str) -> dict:
     }
 
 
+def find_passage(query: str, limit: int = 4) -> dict:
+    """在文档片段里定位原文，回答可给出处（第几段/引用原文）。"""
+    with SessionLocal() as db:
+        hits = search_passages(db, query, owner=owner_ctx.get(), limit=limit, rerank=True)
+    assets = [
+        {
+            "id": h["asset_id"],
+            "name": h["name"],
+            "modality": h["modality"],
+            "description": h["text"][:160],
+        }
+        for h in hits
+    ]
+    summary = (
+        f"在 {len(hits)} 个文档片段中找到相关内容"
+        if hits
+        else "没有找到相关段落"
+    )
+    return {
+        "ok": bool(hits),
+        "summary": summary,
+        "assets": assets,
+        "passages": [
+            {"asset_id": h["asset_id"], "seq": h["seq"], "name": h["name"], "text": h["text"], "score": h["score"]}
+            for h in hits
+        ],
+    }
+
+
 TOOL_REGISTRY: dict[str, callable] = {
     "search_assets": search_assets,
     "get_asset_detail": get_asset_detail,
@@ -275,4 +306,5 @@ TOOL_REGISTRY: dict[str, callable] = {
     "generate_image": generate_image,
     "transform_asset": transform_asset,
     "find_moment": find_moment,
+    "find_passage": find_passage,
 }
