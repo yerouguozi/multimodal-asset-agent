@@ -141,17 +141,10 @@ cd backend
 │   ├── scripts/         # 实测 / 演示 / 评测
 │   └── tests/           # 53 个 pytest 用例（LLM 全 mock）
 ├── frontend/            # React + Vite + TS
-├── docs/                # 设计与进度文档 + 评测报告
+├── docs/eval-reports/   # 检索评测报告
 └── docker-compose.yml
 ```
 
 ## 文档导航
 
-- [00-项目概述](docs/00-项目概述.md)
-- [01-功能设计](docs/01-功能设计.md)
-- [02-架构设计](docs/02-架构设计.md)
-- [03-开发规范](docs/03-开发规范.md)
-- [04-开发计划](docs/04-开发计划.md)
-- [05-简历项目介绍](docs/05-简历项目介绍.md)
-- [06-接入质控平台](docs/06-接入质控平台.md)
 - [检索评测报告](docs/eval-reports/检索评测报告.md)
