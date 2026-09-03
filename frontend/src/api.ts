@@ -7,6 +7,7 @@ import type {
   ChatEvent,
   DomainProfile,
   SearchHit,
+  SearchMetrics,
   SearchResponse,
   UploadItem,
   UsageSummary,
@@ -94,6 +95,10 @@ export async function searchByImage(file: File): Promise<SearchHit[]> {
 
 export function fetchUsageSummary(): Promise<UsageSummary> {
   return apiFetch("/api/usage/summary").then((r) => j<UsageSummary>(r));
+}
+
+export function fetchSearchMetrics(): Promise<SearchMetrics> {
+  return apiFetch("/api/metrics/search").then((r) => j<SearchMetrics>(r));
 }
 
 export function fetchChatSessions(): Promise<ChatSessionSummary[]> {

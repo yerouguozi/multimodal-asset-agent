@@ -18,6 +18,8 @@ from .auth import resolve_owner
 
 router = APIRouter(prefix="/api/search", tags=["search"])
 
+VALID_STRATEGIES = ("full", "rrf", "gate", "tri", "bm25")
+
 
 @router.get("", response_model=SearchResponse)
 def search(
@@ -25,11 +27,14 @@ def search(
     modality: str | None = None,
     tag: str | None = None,
     limit: int = 20,
+    strategy: str = "full",
     db: Session = Depends(get_db),
     owner: str = Depends(resolve_owner),
 ):
+    if strategy not in VALID_STRATEGIES:
+        raise HTTPException(422, f"strategy 可选：{', '.join(VALID_STRATEGIES)}")
     t0 = time.perf_counter()
-    hits = search_service.search(db, q, modality=modality, tag=tag, limit=limit, owner=owner)
+    hits = search_service.search(db, q, modality=modality, tag=tag, limit=limit, strategy=strategy, owner=owner)
     record_search(
         db,
         owner=owner,
@@ -37,6 +42,7 @@ def search(
         hits_count=len(hits),
         latency_ms=int((time.perf_counter() - t0) * 1000),
         modality=modality or "",
+        strategy=strategy,
         top_ids=[a.id for a, _ in hits],
     )
     return SearchResponse(

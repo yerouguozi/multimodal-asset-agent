@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, FolderGit, LogOut, UserCircle2, X } from "lucide-react";
+import { Activity, ArrowLeft, FolderGit, LogOut, UserCircle2, X } from "lucide-react";
 import {
   clearAuth,
   deleteAsset,
@@ -234,6 +234,10 @@ export default function Workspace() {
             <FolderGit size={14} />
             GitHub
           </a>
+          <Link className="ghost-chip" to="/metrics" title="检索实时指标">
+            <Activity size={14} />
+            指标
+          </Link>
           <Link className="ghost-chip" to="/">
             <ArrowLeft size={14} />
             介绍页

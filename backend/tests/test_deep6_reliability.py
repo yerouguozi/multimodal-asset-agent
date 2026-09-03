@@ -93,3 +93,17 @@ def test_agent_answer_citation_guard(client, monkeypatch):
     })
     assert "引用校验" in result["answer"]
     assert "#99" in result["answer"]
+
+
+def test_search_strategy_param_and_metrics_extended(client, monkeypatch):
+    _seed(client, monkeypatch)
+    assert client.get("/api/search", params={"q": "夜景", "strategy": "nope"}).status_code == 422
+    client.get("/api/search", params={"q": "夜景", "strategy": "bm25"})
+    client.get("/api/search", params={"q": "夜景", "strategy": "gate"})
+
+    m = client.get("/api/metrics/search").json()
+    assert m["total_queries"] == 2
+    assert m["by_strategy"] == {"bm25": 1, "gate": 1}
+    assert len(m["recent"]) == 2
+    assert m["recent"][-1]["strategy"] == "gate"
+    assert m["recent"][-1]["query"] == "夜景"

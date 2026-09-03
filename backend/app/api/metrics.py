@@ -30,7 +30,9 @@ def search_metrics(db: Session = Depends(get_db), owner: str = Depends(resolve_o
             "p95_latency_ms": 0.0,
             "avg_hits": 0.0,
             "by_source": {},
+            "by_strategy": {},
             "top_queries": [],
+            "recent": [],
         }
     latencies = sorted(r.latency_ms for r in rows)
     hits = [r.hits_count for r in rows]
@@ -48,11 +50,25 @@ def search_metrics(db: Session = Depends(get_db), owner: str = Depends(resolve_o
         for q, c in top_counter.most_common(10)
     ]
     by_source: Counter[str] = Counter(r.source for r in rows)
+    by_strategy: Counter[str] = Counter(r.strategy or "full" for r in rows)
+    recent = [
+        {
+            "created_at": r.created_at.isoformat(),
+            "query": r.query,
+            "source": r.source,
+            "strategy": r.strategy or "full",
+            "latency_ms": r.latency_ms,
+            "hits_count": r.hits_count,
+        }
+        for r in rows[-15:]
+    ]
     return {
         "total_queries": len(rows),
         "avg_latency_ms": round(sum(latencies) / len(latencies), 1),
         "p95_latency_ms": _p95(latencies),
         "avg_hits": round(sum(hits) / len(hits), 2),
         "by_source": dict(by_source),
+        "by_strategy": dict(by_strategy),
         "top_queries": top_queries,
+        "recent": recent,
     }

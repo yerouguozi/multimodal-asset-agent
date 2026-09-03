@@ -131,3 +131,21 @@ export interface AssetSegments {
   duration?: number | null;
   segments: TranscriptSegment[];
 }
+
+export interface SearchMetrics {
+  total_queries: number;
+  avg_latency_ms: number;
+  p95_latency_ms: number;
+  avg_hits: number;
+  by_source: Record<string, number>;
+  by_strategy: Record<string, number>;
+  top_queries: { query: string; count: number; avg_latency_ms: number }[];
+  recent: {
+    created_at: string;
+    query: string;
+    source: string;
+    strategy: string;
+    latency_ms: number;
+    hits_count: number;
+  }[];
+}
