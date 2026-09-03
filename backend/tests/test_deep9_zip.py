@@ -44,3 +44,23 @@ def test_batch_download_scoped_to_owner(client, monkeypatch):
         headers={"Authorization": f"Bearer {token}"},
     )
     assert r.status_code == 404
+
+
+def test_asset_patch_rename_description_and_tags(client, monkeypatch):
+    up, _ = _seed(client, monkeypatch)
+    aid = up.json()["items"][0]["asset"]["id"]
+    r = client.patch(
+        f"/api/assets/{aid}",
+        json={
+            "name": "城市夜景（人工修订）",
+            "description": "人工补充的描述",
+            "add_tags": ["夜景", "人工"],
+            "remove_tags": ["夜景"],
+        },
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["name"] == "城市夜景（人工修订）"
+    assert body["description"] == "人工补充的描述"
+    names = {t["name"] for t in body["tags"]}
+    assert "人工" in names and "夜景" not in names

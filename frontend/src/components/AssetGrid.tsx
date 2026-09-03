@@ -152,6 +152,16 @@ export default function AssetGrid({
           >
             {selectMode ? "完成" : "选择"}
           </button>
+          {selectMode && (
+            <button
+              type="button"
+              className="link-btn"
+              disabled={assets.length === 0 || selected.size === assets.length}
+              onClick={() => setSelected(new Set(assets.map((a) => a.id)))}
+            >
+              全选本页
+            </button>
+          )}
           <span className="head-hint">点击卡片查看详情</span>
         </span>
       </div>

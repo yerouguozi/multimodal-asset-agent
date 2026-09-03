@@ -132,15 +132,27 @@ def patch_asset(
     asset = db.query(Asset).filter(Asset.id == asset_id, Asset.owner == owner).first()
     if asset is None:
         raise HTTPException(404, "素材不存在")
+    if body.name is not None and body.name.strip():
+        asset.name = body.name.strip()[:255]
+    if body.description is not None:
+        asset.description = body.description.strip()[:5000] or None
     for name in body.add_tags:
         name = name.strip()
         if not name:
             continue
         if not any(t.name == name for t in asset.tags):
             db.add(Tag(asset_id=asset.id, name=name, source="user"))
+    db.flush()
+    remove = {n.strip() for n in body.remove_tags if n.strip()}
+    if remove:
+        db.query(Tag).filter(
+            Tag.asset_id == asset_id,
+            Tag.name.in_(remove),
+        ).delete(synchronize_session=False)
     db.commit()
-    db.refresh(asset)
-    return asset
+    db.expire_all()
+    fresh = db.query(Asset).filter(Asset.id == asset_id, Asset.owner == owner).first()
+    return fresh or asset
 
 
 @router.delete("/{asset_id}")

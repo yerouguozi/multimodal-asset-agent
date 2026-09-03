@@ -77,6 +77,17 @@ export function fetchAsset(id: number): Promise<Asset> {
   return apiFetch(`/api/assets/${id}`).then((r) => j<Asset>(r));
 }
 
+export function patchAsset(
+  id: number,
+  patch: { name?: string; description?: string | null }
+): Promise<Asset> {
+  return apiFetch(`/api/assets/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch),
+  }).then((r) => j<Asset>(r));
+}
+
 export function fetchAssetSegments(id: number): Promise<AssetSegments> {
   return apiFetch(`/api/assets/${id}/segments`).then((r) => j<AssetSegments>(r));
 }

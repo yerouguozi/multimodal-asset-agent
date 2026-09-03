@@ -10,6 +10,7 @@ import {
   Image as ImageIcon,
   Maximize2,
   Mic,
+  Pencil,
   ScanText,
   Timer,
   Trash2,
@@ -18,6 +19,7 @@ import {
 import type { Asset } from "../types";
 import type { TranscriptSegment } from "../types";
 import { fetchAssetSegments } from "../api";
+import { patchAsset } from "../api";
 import { fmtDateTime } from "../time";
 
 interface Props {
@@ -25,6 +27,7 @@ interface Props {
   initialSeek?: number | null;
   onClose: () => void;
   onDelete: (id: number) => void;
+  onUpdated?: (asset: Asset) => void;
 }
 
 const MODALITY_ICON: Record<string, ComponentType<{ size?: number | string; className?: string }>> = {
@@ -55,12 +58,16 @@ function fmtTs(sec?: number): string {
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
-export default function AssetDetailModal({ asset, initialSeek, onClose, onDelete }: Props) {
+export default function AssetDetailModal({ asset, initialSeek, onClose, onDelete, onUpdated }: Props) {
   const modalRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const [segments, setSegments] = useState<TranscriptSegment[]>([]);
+  const [editing, setEditing] = useState(false);
+  const [draftName, setDraftName] = useState(asset.name);
+  const [draftDesc, setDraftDesc] = useState(asset.description ?? "");
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (initialSeek == null) return;
@@ -131,6 +138,29 @@ export default function AssetDetailModal({ asset, initialSeek, onClose, onDelete
     }
   };
 
+  const startEdit = () => {
+    setDraftName(asset.name);
+    setDraftDesc(asset.description ?? "");
+    setEditing(true);
+  };
+
+  const saveEdit = async () => {
+    if (!draftName.trim()) return;
+    setSaving(true);
+    try {
+      const updated = await patchAsset(asset.id, {
+        name: draftName.trim(),
+        description: draftDesc.trim() || null,
+      });
+      setEditing(false);
+      onUpdated?.(updated);
+    } catch {
+      window.alert("保存失败，请重试");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const Icon = MODALITY_ICON[asset.modality] ?? FileText;
   const rows: { k: string; v: string; Icon: ComponentType<{ size?: number | string; className?: string }> }[] = [
     { k: "编号", v: `#${asset.id}`, Icon: Hash },
@@ -177,6 +207,16 @@ export default function AssetDetailModal({ asset, initialSeek, onClose, onDelete
               {STATUS_TEXT[asset.status] ?? asset.status}
             </span>
             <button
+              type="button"
+              className="icon-btn sm"
+              onClick={startEdit}
+              disabled={saving || editing}
+              aria-label={editing ? "保存修改" : "编辑素材"}
+              title={editing ? "保存修改" : "编辑素材"}
+            >
+              <Pencil size={14} />
+            </button>
+            <button
               ref={closeRef}
               type="button"
               className="icon-btn"
@@ -190,6 +230,37 @@ export default function AssetDetailModal({ asset, initialSeek, onClose, onDelete
         </header>
 
         <div className="modal-body">
+          {editing && (
+            <section className="modal-editor">
+              <label>
+                名称
+                <input
+                  className="text-input"
+                  value={draftName}
+                  onChange={(e) => setDraftName(e.target.value)}
+                  maxLength={255}
+                />
+              </label>
+              <label>
+                描述（会影响关键词检索，保存后自动刷新素材列表）
+                <textarea
+                  className="text-input editor-textarea"
+                  rows={4}
+                  value={draftDesc}
+                  onChange={(e) => setDraftDesc(e.target.value)}
+                  maxLength={5000}
+                />
+              </label>
+              <div className="editor-actions">
+                <button type="button" className="btn primary" onClick={() => void saveEdit()} disabled={saving}>
+                  {saving ? "保存中…" : "保存"}
+                </button>
+                <button type="button" className="btn soft" onClick={() => setEditing(false)} disabled={saving}>
+                  取消
+                </button>
+              </div>
+            </section>
+          )}
           {asset.modality === "video" && asset.media_url ? (
             <div className="modal-preview">
               <video

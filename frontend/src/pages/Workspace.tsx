@@ -201,6 +201,14 @@ export default function Workspace() {
     setSeekTarget(null);
   }, []);
 
+  const handleAssetUpdated = useCallback(
+    (a: Asset) => {
+      setSelected(a);
+      void load();
+    },
+    [load]
+  );
+
   const handleLogout = () => {
     clearAuth();
     window.location.reload();
@@ -297,7 +305,13 @@ export default function Workspace() {
       </main>
 
       {selected && (
-        <AssetDetailModal asset={selected} initialSeek={seekTarget} onClose={closeModal} onDelete={handleDelete} />
+        <AssetDetailModal
+          asset={selected}
+          initialSeek={seekTarget}
+          onClose={closeModal}
+          onDelete={handleDelete}
+          onUpdated={handleAssetUpdated}
+        />
       )}
     </div>
   );

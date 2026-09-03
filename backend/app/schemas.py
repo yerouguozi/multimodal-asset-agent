@@ -76,9 +76,12 @@ class SearchResponse(BaseModel):
 
 
 class AssetPatch(BaseModel):
-    """目前支持人工增补标签。"""
+    """人工治理：改名 / 改描述 / 增删标签。"""
 
+    name: str | None = None
+    description: str | None = None
     add_tags: list[str] = []
+    remove_tags: list[str] = []
 
 
 class DomainProfileOut(BaseModel):

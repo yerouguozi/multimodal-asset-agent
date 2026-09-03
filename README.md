@@ -22,6 +22,7 @@ LangGraph 素材助理 Agent 帮你搜素材、生成素材、处理素材、总
 - **片段级向量后端可切换**：chunk 向量库与素材向量库同构，支持 local npz / Milvus（独立 mma_chunk_ 命名空间，连接失败自动降级）
 - **两级检索对比评测**：scripts/eval_passage_vs_asset.py 离线样例对比整篇 Top-5 与片段 Top-1 召回与延迟，报告见 docs/eval-reports；片段命中可在对话轨迹里一键点开素材并跳转到对应时间戳播放
 - **素材取回**：单文件下载（卡片/详情）+ 多选 ZIP 批量打包（仅限本人素材，服务端打包）
+- **素材治理**：详情弹窗可编辑名称/描述；接口支持按名删除标签（人工修正可反哺检索字段）
 - **成本意识**：简单图片走 Qwen3-VL-8B、复杂走 32B 的模型路由；每次模型调用记入 UsageLog，前端实时显示估算成本
 - **可评测**：自建 24 素材/39 查询评测集，三种检索策略量化对比（见下方）
 
@@ -56,7 +57,7 @@ LangGraph 素材助理 Agent 帮你搜素材、生成素材、处理素材、总
 | 多模态 | SiliconFlow：Qwen3-VL（视觉/路由）/ SenseVoice（转写）/ Qwen-Image（文生图）/ bge-m3 / bge-reranker |
 | 检索 | 自实现 BM25 · RRF 融合 · 重排 · Recall@k/MRR/NDCG 评测 |
 | 前端 | React 18 · Vite · TypeScript · Nginx |
-| 测试/CI | pytest（86 用例）· GitHub Actions |
+| 测试/CI | pytest（87 用例）· GitHub Actions |
 | 部署 | Docker Compose（backend + frontend/nginx） |
 
 ## 架构
@@ -125,7 +126,7 @@ cd backend
 |---|---|---|
 | POST | /api/upload | 上传素材（多文件） |
 | GET | /api/assets | 素材列表/筛选 |
-| GET/PATCH/DELETE | /api/assets/{id} | 详情 / 改标签 / 删除 |
+| GET/PATCH/DELETE | /api/assets/{id} | 详情 / 改名与描述 / 增删标签 / 删除 |
 | GET | /api/search?q=&strategy= | 跨模态语义检索（strategy：full/rrf/gate/tri/bm25，供在线 A/B） |
 | POST | /api/search/image | 以图搜图（上传参考图） |
 | GET | /api/search/transcript | 音视频转写片段时间戳检索 |
@@ -153,7 +154,7 @@ cd backend
 │   │   ├── llm/         # 多模态客户端（降级/重试/路由）
 │   │   └── core/        # 配置 / 数据库
 │   ├── scripts/         # 实测 / 演示 / 评测
-│   └── tests/           # 86 个 pytest 用例（LLM 全 mock）
+│   └── tests/           # 87 个 pytest 用例（LLM 全 mock）
 ├── frontend/            # React + Vite + TS
 ├── docs/eval-reports/   # 检索评测报告
 └── docker-compose.yml
