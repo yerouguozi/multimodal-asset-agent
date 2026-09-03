@@ -6,11 +6,13 @@
 from __future__ import annotations
 
 from contextvars import ContextVar
+import time
 
 from ..core.database import SessionLocal
 from ..domain.profile import build_profile
 from ..models import Asset, Tag
 from ..retrieval import search as search_service
+from ..retrieval.search_log import record_search
 
 owner_ctx: ContextVar[str] = ContextVar("asset_owner", default="local")
 
@@ -36,7 +38,17 @@ def _asset_brief(asset: Asset) -> dict:
 
 def search_assets(query: str, limit: int = 5) -> dict:
     with SessionLocal() as db:
+        t0 = time.perf_counter()
         hits = search_service.search(db, query, limit=limit, owner=owner_ctx.get())
+        record_search(
+            db,
+            owner=owner_ctx.get(),
+            query=query,
+            source="agent-tool",
+            hits_count=len(hits),
+            latency_ms=int((time.perf_counter() - t0) * 1000),
+            top_ids=[a.id for a, _ in hits],
+        )
         assets = [_asset_brief(a) for a, _ in hits]
     return {
         "ok": True,

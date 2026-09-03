@@ -157,3 +157,20 @@ class Embedding(Base):
     model: Mapped[str] = mapped_column(String(120))
     dim: Mapped[int] = mapped_column(Integer)
     vector: Mapped[bytes] = mapped_column(LargeBinary)
+
+
+class SearchLog(Base):
+    """检索可观测：每条查询的来源/耗时/命中数/Top 结果，支撑延迟与质量分析。"""
+
+    __tablename__ = "search_logs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    owner: Mapped[str] = mapped_column(String(64), default="local", index=True)
+    query: Mapped[str] = mapped_column(String(500), default="")
+    modality: Mapped[str] = mapped_column(String(20), default="")
+    source: Mapped[str] = mapped_column(String(20), default="api")  # api | agent-tool
+    strategy: Mapped[str] = mapped_column(String(20), default="full")
+    hits_count: Mapped[int] = mapped_column(Integer, default=0)
+    latency_ms: Mapped[int] = mapped_column(Integer, default=0)
+    top_ids: Mapped[str] = mapped_column(Text, default="[]")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)

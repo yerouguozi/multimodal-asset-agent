@@ -213,6 +213,35 @@ def _template_answer(results: list[dict]) -> str:
     return "\n".join(lines) or "我是你的素材库助手，可以帮你搜素材、看详情、分析领域、找音频里的某段话、生成或处理素材。"
 
 
+def verify_citations(answer: str, results: list[dict]) -> str:
+    """防幻觉硬规则：回答里引用的 #id 必须在本轮工具结果中出现。
+
+    只做提示性规则兜底（Prompt 是第一道约束，这里是第二道可测试的防线），
+    找不到的编号会被标注出来，避免用户误信不存在素材。
+    """
+    if not answer:
+        return answer
+    referenced = {int(x) for x in re.findall(r"#\s*(\d+)", answer)}
+    if not referenced:
+        return answer
+    valid: set[int] = set()
+    for r in results:
+        for a in r.get("assets") or []:
+            try:
+                valid.add(int(a["id"]))
+            except (KeyError, TypeError, ValueError):
+                continue
+        for m in r.get("moments") or []:
+            try:
+                valid.add(int(m["asset_id"]))
+            except (KeyError, TypeError, ValueError):
+                continue
+    invalid = sorted(referenced - valid)
+    if invalid:
+        return answer + "\n\n（引用校验：回答中 #" + "、#".join(str(i) for i in invalid) + " 不在本轮工具结果中，请以实际检索结果为准。）"
+    return answer
+
+
 def answer_node(state: AgentState) -> dict:
     results = state.get("results", [])
     tool_text = json.dumps(results, ensure_ascii=False)[:2000]
@@ -223,7 +252,7 @@ def answer_node(state: AgentState) -> dict:
     )
     if not answer:
         answer = _template_answer(results)
-    return {"answer": answer}
+    return {"answer": verify_citations(answer, results)}
 
 
 def _route(state: AgentState) -> str:

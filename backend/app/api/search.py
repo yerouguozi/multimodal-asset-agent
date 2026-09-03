@@ -1,6 +1,7 @@
 """语义检索接口：文本检索 / 以图搜图 / 转写片段时间戳检索。"""
 import base64
 import json
+import time
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy.orm import Session
@@ -10,6 +11,7 @@ from ..core.database import get_db
 from ..llm.client import client as llm_client
 from ..models import Asset
 from ..retrieval import search as search_service
+from ..retrieval.search_log import record_search
 from ..retrieval.vector_store import vector_store
 from ..schemas import AssetOut, SearchHit, SearchResponse
 from .auth import resolve_owner
@@ -26,7 +28,17 @@ def search(
     db: Session = Depends(get_db),
     owner: str = Depends(resolve_owner),
 ):
+    t0 = time.perf_counter()
     hits = search_service.search(db, q, modality=modality, tag=tag, limit=limit, owner=owner)
+    record_search(
+        db,
+        owner=owner,
+        query=q,
+        hits_count=len(hits),
+        latency_ms=int((time.perf_counter() - t0) * 1000),
+        modality=modality or "",
+        top_ids=[a.id for a, _ in hits],
+    )
     return SearchResponse(
         query=q,
         hits=[SearchHit(asset=AssetOut.model_validate(a), score=round(s, 4)) for a, s in hits],
