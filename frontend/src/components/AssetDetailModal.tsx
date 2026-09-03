@@ -1,3 +1,19 @@
+import { useEffect, useRef } from "react";
+import type { ComponentType } from "react";
+import {
+  Clock,
+  FileText,
+  Film,
+  HardDrive,
+  Hash,
+  Image as ImageIcon,
+  Maximize2,
+  Mic,
+  ScanText,
+  Timer,
+  Trash2,
+  X,
+} from "lucide-react";
 import type { Asset } from "../types";
 
 interface Props {
@@ -6,67 +22,209 @@ interface Props {
   onDelete: (id: number) => void;
 }
 
+const MODALITY_ICON: Record<string, ComponentType<{ size?: number | string; className?: string }>> = {
+  image: ImageIcon,
+  video: Film,
+  audio: Mic,
+  document: FileText,
+};
+
+const STATUS_TEXT: Record<string, string> = {
+  ready: "就绪",
+  pending: "排队中",
+  processing: "处理中",
+  failed: "失败",
+};
+
 function fmtSize(n: number): string {
   if (n >= 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`;
   if (n >= 1024) return `${(n / 1024).toFixed(1)} KB`;
   return `${n} B`;
 }
 
+function fmtDate(iso: string): string {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime())
+    ? iso
+    : d.toLocaleString("zh-CN", { hour12: false });
+}
+
+const FOCUSABLE =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
 export default function AssetDetailModal({ asset, onClose, onDelete }: Props) {
-  const rows: [string, string | null][] = [
-    ["类型", asset.modality],
-    ["原始文件名", asset.original_filename],
-    ["大小", fmtSize(asset.size_bytes)],
-    ["状态", asset.status],
-    ["描述", asset.description],
-    ["OCR", asset.ocr_text],
-    ["转写", asset.transcript],
-    ["正文", asset.text_content],
-    ["尺寸", asset.width && asset.height ? `${asset.width} × ${asset.height}` : null],
-    ["时长", asset.duration != null ? `${asset.duration.toFixed(1)} 秒` : null],
-    ["上传时间", asset.created_at],
-    ["错误信息", asset.error_message],
+  const modalRef = useRef<HTMLDivElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    const prev = document.activeElement as HTMLElement | null;
+    const gap = window.innerWidth - document.documentElement.clientWidth;
+    document.body.style.overflow = "hidden";
+    if (gap > 0) document.body.style.paddingRight = `${gap}px`;
+    closeRef.current?.focus();
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onClose();
+        return;
+      }
+      if (e.key !== "Tab" || !modalRef.current) return;
+      const nodes = Array.from(modalRef.current.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(
+        (n) => n.offsetParent !== null
+      );
+      if (!nodes.length) return;
+      const first = nodes[0];
+      const last = nodes[nodes.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = "";
+      document.body.style.paddingRight = "";
+      prev?.focus?.();
+    };
+  }, [onClose]);
+
+  const Icon = MODALITY_ICON[asset.modality] ?? FileText;
+  const rows: { k: string; v: string; Icon: ComponentType<{ size?: number | string; className?: string }> }[] = [
+    { k: "编号", v: `#${asset.id}`, Icon: Hash },
+    { k: "原始文件名", v: asset.original_filename, Icon: FileText },
+    { k: "大小", v: fmtSize(asset.size_bytes), Icon: HardDrive },
+    { k: "上传时间", v: fmtDate(asset.created_at), Icon: Clock },
+    ...(asset.width && asset.height
+      ? [{ k: "尺寸", v: `${asset.width} × ${asset.height}px`, Icon: Maximize2 }]
+      : []),
+    ...(asset.duration != null
+      ? [{ k: "时长", v: `${asset.duration.toFixed(1)} 秒`, Icon: Timer }]
+      : []),
   ];
+  const contentBlocks: { label: string; text: string; Icon: ComponentType<{ size?: number | string; className?: string }> }[] = [
+    { label: "自动描述", text: asset.description ?? "", Icon: ScanText },
+    { label: "OCR 文字", text: asset.ocr_text ?? "", Icon: ScanText },
+    { label: "语音转写", text: asset.transcript ?? "", Icon: Mic },
+    { label: "文档正文", text: asset.text_content ?? "", Icon: FileText },
+  ].filter((b) => b.text);
 
   return (
     <div className="modal-mask" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-head">
-          <b>
-            #{asset.id} {asset.name}
-          </b>
-          <button className="link-btn" onClick={onClose}>
+      <div
+        ref={modalRef}
+        className="modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label={`素材详情 #${asset.id} ${asset.name}`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <header className="modal-head">
+          <div className="modal-title-wrap">
+            <span className={`type-pill ${asset.modality}`}>
+              <Icon size={11} aria-hidden="true" />
+              {asset.modality}
+            </span>
+            <h2 id="asset-modal-title">
+              #{asset.id} {asset.name}
+            </h2>
+          </div>
+          <div className="modal-head-actions">
+            <span className={`status-pill ${asset.status}`}>
+              <i />
+              {STATUS_TEXT[asset.status] ?? asset.status}
+            </span>
+            <button
+              ref={closeRef}
+              type="button"
+              className="icon-btn"
+              onClick={onClose}
+              aria-label="关闭详情"
+              title="关闭（Esc）"
+            >
+              <X size={16} />
+            </button>
+          </div>
+        </header>
+
+        <div className="modal-body">
+          {asset.thumbnail_url && (
+            <div className="modal-preview">
+              <img src={asset.thumbnail_url} alt={asset.name} />
+            </div>
+          )}
+
+          {asset.error_message && (
+            <div className="modal-error" role="alert">
+              处理失败：{asset.error_message}
+            </div>
+          )}
+
+          <dl className="detail-grid">
+            {rows.map(({ k, v, Icon: RowIcon }) => (
+              <div key={k} className="detail-item">
+                <dt>
+                  <RowIcon size={13} aria-hidden="true" />
+                  {k}
+                </dt>
+                <dd>{v}</dd>
+              </div>
+            ))}
+          </dl>
+
+          {asset.tags.length > 0 && (
+            <section className="modal-section">
+              <h3>标签</h3>
+              <div className="tags">
+                {asset.tags.map((t) => (
+                  <span key={t.id} className="tag" title={`来源：${t.source}`}>
+                    {t.name}
+                    <i>{t.source}</i>
+                  </span>
+                ))}
+              </div>
+            </section>
+          )}
+
+          <section className="modal-section">
+            <h3>内容理解</h3>
+            {contentBlocks.length ? (
+              contentBlocks.map(({ label, text, Icon: BlockIcon }) => (
+                <div key={label} className="content-block">
+                  <h4>
+                    <BlockIcon size={13} aria-hidden="true" />
+                    {label}
+                  </h4>
+                  <p>{text}</p>
+                </div>
+              ))
+            ) : (
+              <p className="modal-muted">
+                {asset.status === "ready"
+                  ? "这条素材已入库，但没有可展示的理解文本。"
+                  : "理解结果生成后会显示在这里。"}
+              </p>
+            )}
+          </section>
+        </div>
+
+        <footer className="modal-foot">
+          <button type="button" className="btn soft" onClick={onClose}>
             关闭
           </button>
-        </div>
-        <div className="modal-body">
-          {asset.thumbnail_url && <img className="modal-img" src={asset.thumbnail_url} alt="" />}
-          <div className="tags">
-            {asset.tags.map((t) => (
-              <span key={t.id} className="tag">
-                {t.name}（{t.source}）
-              </span>
-            ))}
-          </div>
-          <table className="detail-table">
-            <tbody>
-              {rows.map(
-                ([k, v]) =>
-                  v != null && v !== "" && (
-                    <tr key={k}>
-                      <td className="k">{k}</td>
-                      <td className="v">{v}</td>
-                    </tr>
-                  )
-              )}
-            </tbody>
-          </table>
-        </div>
-        <div className="modal-foot">
-          <button className="btn danger" onClick={() => onDelete(asset.id)}>
+          <button
+            type="button"
+            className="btn danger"
+            onClick={() => onDelete(asset.id)}
+          >
+            <Trash2 size={14} />
             删除素材
           </button>
-        </div>
+        </footer>
       </div>
     </div>
   );

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, FolderGit } from "lucide-react";
+import { ArrowLeft, FolderGit, X } from "lucide-react";
 import {
   deleteAsset,
   fetchAssets,
@@ -29,6 +29,8 @@ export default function Workspace() {
   const [usage, setUsage] = useState<UsageSummary | null>(null);
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
+  const [gridLoading, setGridLoading] = useState(true);
+  const [imageSearched, setImageSearched] = useState(false);
   const timerRef = useRef<number | undefined>(undefined);
 
   const notify = useCallback((m: string) => {
@@ -39,15 +41,46 @@ export default function Workspace() {
 
   const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
+  const runList = useCallback(
+    async (m: string, t: string) => {
+      setGridLoading(true);
+      try {
+        const data = await fetchAssets({ modality: m || undefined, tag: t || undefined, pageSize: 50 });
+        setAssets(data.items);
+        setTotal(data.total);
+      } catch (e) {
+        notify(`加载素材失败：${errMsg(e)}`);
+      } finally {
+        setGridLoading(false);
+      }
+    },
+    [notify]
+  );
+
+  const runSearch = useCallback(
+    async (q: string, m: string, t: string) => {
+      setGridLoading(true);
+      try {
+        const r = await searchAssets(q, m || undefined, t || undefined);
+        setAssets(r.hits.map((h) => h.asset));
+        setTotal(r.hits.length);
+      } catch (e) {
+        notify(`搜索失败：${errMsg(e)}`);
+      } finally {
+        setGridLoading(false);
+      }
+    },
+    [notify]
+  );
+
   const load = useCallback(async () => {
     try {
-      const data = await fetchAssets({ modality, tag, pageSize: 50 });
-      setAssets(data.items);
-      setTotal(data.total);
+      await runList(modality, tag);
     } catch (e) {
-      notify(`加载素材失败：${errMsg(e)}`);
+      // 错误已在 runList 内提示
+      void e;
     }
-  }, [modality, tag, notify]);
+  }, [modality, tag, runList]);
 
   useEffect(() => {
     void load();
@@ -63,29 +96,38 @@ export default function Workspace() {
   }, [refreshMeta]);
 
   const handleSearch = async () => {
-    if (!query.trim()) {
-      await load();
-      return;
+    const q = query.trim();
+    if (q) {
+      setImageSearched(false);
+      await runSearch(q, modality, tag);
+    } else {
+      setImageSearched(false);
+      await runList(modality, tag);
     }
-    setBusy(true);
-    try {
-      const r = await searchAssets(query.trim(), modality || undefined, tag || undefined);
-      setAssets(r.hits.map((h) => h.asset));
-      setTotal(r.hits.length);
-    } catch (e) {
-      notify(`搜索失败：${errMsg(e)}`);
-    } finally {
-      setBusy(false);
+  };
+
+  const handleModalityChange = (m: string) => {
+    setModality(m);
+    setImageSearched(false);
+    const q = query.trim();
+    if (q) {
+      void runSearch(q, m, tag);
+    } else {
+      void runList(m, tag);
     }
   };
 
   const handleReset = () => {
     setQuery("");
-    void load();
+    setModality("");
+    setTag("");
+    setImageSearched(false);
+    void runList("", "");
   };
 
   const handleImageSearch = async (file: File) => {
-    setBusy(true);
+    setGridLoading(true);
+    setImageSearched(true);
     try {
       const hits = await searchByImage(file);
       setAssets(hits.map((h) => h.asset));
@@ -94,7 +136,7 @@ export default function Workspace() {
     } catch (e) {
       notify(`以图搜图失败：${errMsg(e)}`);
     } finally {
-      setBusy(false);
+      setGridLoading(false);
     }
   };
 
@@ -109,7 +151,12 @@ export default function Workspace() {
         return `#${it.asset!.id} 已入库（${it.asset!.status}）`;
       });
       notify(msgs.join("；"));
-      await load();
+      const q = query.trim();
+      if (q) {
+        await runSearch(q, modality, tag);
+      } else {
+        await runList(modality, tag);
+      }
       refreshMeta();
     } catch (e) {
       notify(`上传失败：${errMsg(e)}`);
@@ -130,6 +177,10 @@ export default function Workspace() {
       notify(`删除失败：${errMsg(e)}`);
     }
   };
+
+  const closeModal = useCallback(() => setSelected(null), []);
+
+  const hasFilter = Boolean(query.trim() || modality || tag || imageSearched);
 
   return (
     <div className="app workspace">
@@ -156,7 +207,14 @@ export default function Workspace() {
         </div>
       </header>
 
-      {notice && <div className="notice">{notice}</div>}
+      {notice && (
+        <div className="notice" role="status" aria-live="polite">
+          <span>{notice}</span>
+          <button className="notice-close" aria-label="关闭提示" onClick={() => setNotice("")}>
+            <X size={14} />
+          </button>
+        </div>
+      )}
 
       <main className="layout">
         <section className="left">
@@ -165,14 +223,22 @@ export default function Workspace() {
             query={query}
             setQuery={setQuery}
             modality={modality}
-            setModality={setModality}
+            onModalityChange={handleModalityChange}
             tag={tag}
             setTag={setTag}
             onSearch={handleSearch}
             onReset={handleReset}
             onImageSearch={handleImageSearch}
           />
-          <AssetGrid assets={assets} total={total} onOpen={setSelected} onDelete={handleDelete} />
+          <AssetGrid
+            assets={assets}
+            total={total}
+            loading={gridLoading}
+            hasFilter={hasFilter}
+            onOpen={setSelected}
+            onDelete={handleDelete}
+            onReset={handleReset}
+          />
         </section>
 
         <aside className="right">
@@ -182,7 +248,7 @@ export default function Workspace() {
       </main>
 
       {selected && (
-        <AssetDetailModal asset={selected} onClose={() => setSelected(null)} onDelete={handleDelete} />
+        <AssetDetailModal asset={selected} onClose={closeModal} onDelete={handleDelete} />
       )}
     </div>
   );
