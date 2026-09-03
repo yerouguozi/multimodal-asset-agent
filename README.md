@@ -76,13 +76,14 @@ graph TD
 ### 方式一：Docker 一键部署
 
 ```powershell
-# 项目根目录建 .env（docker compose 自动读取）
-# SILICONFLOW_API_KEY=sk-xxx
-# DEEPSEEK_API_KEY=sk-xxx
+# 注意：Docker 读根目录 .env；本地开发（方式二）读 backend/.env
+Copy-Item .env.example .env     # 然后编辑 .env 填入 Key 与 JWT_SECRET
 docker compose up -d --build
 ```
 
 打开 <http://localhost:8080>（前端），接口文档 <http://localhost:8000/docs>。
+不填 Key 也能起（自动降级：不打标、仅关键词检索）；填入
+SILICONFLOW_API_KEY / DEEPSEEK_API_KEY 后获得完整多模态理解与语义检索。
 
 ### 方式二：本地开发
 
