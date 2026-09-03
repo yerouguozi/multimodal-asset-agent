@@ -177,12 +177,18 @@ class SearchLog(Base):
 
 
 class DocumentChunk(Base):
-    """长文档分块（段落感知 + 重叠），支撑片段级检索与原文出处。"""
+    """统一内容分块：文档段落（段落感知+重叠）与音视频转写时间片。
+
+    start/end 仅时间片使用（秒）；modality 记录来源模态，供片段级检索返回出处。
+    """
 
     __tablename__ = "document_chunks"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     asset_id: Mapped[int] = mapped_column(ForeignKey("assets.id"), index=True)
+    modality: Mapped[str] = mapped_column(String(20), default="document")
     seq: Mapped[int] = mapped_column(Integer, default=0)
     text: Mapped[str] = mapped_column(Text)
+    start: Mapped[float | None] = mapped_column(Float, nullable=True)
+    end: Mapped[float | None] = mapped_column(Float, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)

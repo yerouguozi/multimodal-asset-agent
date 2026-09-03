@@ -53,6 +53,16 @@ def _migrate_columns() -> None:
                 conn.execute(text("ALTER TABLE assets ADD COLUMN vision_model VARCHAR(120)"))
             if "transcript_segments" not in cols:
                 conn.execute(text("ALTER TABLE assets ADD COLUMN transcript_segments TEXT"))
+            try:
+                cols = {c["name"] for c in inspect(engine).get_columns("document_chunks")}
+                if "modality" not in cols:
+                    conn.execute(text("ALTER TABLE document_chunks ADD COLUMN modality VARCHAR(20) DEFAULT 'document'"))
+                if "start" not in cols:
+                    conn.execute(text("ALTER TABLE document_chunks ADD COLUMN start FLOAT"))
+                if "end" not in cols:
+                    conn.execute(text("ALTER TABLE document_chunks ADD COLUMN end FLOAT"))
+            except Exception:
+                pass
     except Exception:
         # 表不存在或已迁移，忽略
         pass

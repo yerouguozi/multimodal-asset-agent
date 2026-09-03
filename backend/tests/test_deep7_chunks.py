@@ -1,5 +1,6 @@
 """深度七期测试：长文档分块入库 + 片段级检索（出处）+ Agent 片段工具。"""
 import hashlib
+import json
 
 from app.agent.tools import find_passage
 from app.core.config import settings
@@ -123,3 +124,41 @@ def test_chunk_vectors_embedded_and_used_in_passages(client, monkeypatch):
     hits = client.get("/api/search/passages", params={"q": "苹果", "rerank": "false"}).json()["hits"]
     assert hits
     assert "苹果" in hits[0]["text"]
+
+
+def test_transcript_timeline_chunks_semantic_passages(client):
+    with SessionLocal() as db:
+        db.add(Asset(
+            owner="local",
+            name="季度复盘录音",
+            original_filename="rec.mp3",
+            modality="audio",
+            mime_type="audio/mpeg",
+            size_bytes=1,
+            storage_path="uploads/audio/rec.mp3",
+            sha256="audioseg1",
+            status="ready",
+            transcript_segments=json.dumps(
+                [
+                    {"start": 0.0, "end": 20.0, "text": "先回顾一下本季度产品发布情况。"},
+                    {"start": 20.0, "end": 45.0, "text": "增长放缓的主要原因是渠道投放转化不足。"},
+                    {"start": 45.0, "end": 70.0, "text": "下阶段重点是留存与复购场景。"},
+                ],
+                ensure_ascii=False,
+            ),
+        ))
+        db.commit()
+
+    hits = client.get("/api/search/passages", params={"q": "渠道转化不足", "rerank": "false"}).json()["hits"]
+    assert hits and hits[0]["modality"] == "audio"
+    assert hits[0]["start"] == 20.0
+    assert "渠道投放转化不足" in hits[0]["text"]
+
+    with SessionLocal() as db:
+        chunk = (
+            db.query(DocumentChunk)
+            .filter(DocumentChunk.modality == "audio")
+            .order_by(DocumentChunk.seq.asc())
+            .first()
+        )
+        assert chunk is not None and chunk.start == 0.0

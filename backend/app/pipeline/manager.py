@@ -8,6 +8,7 @@ IngestionMode=sync 时同步执行（测试与小型演示）；async 时后台 
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from pathlib import Path
 
@@ -106,16 +107,47 @@ class IngestionManager:
                     db.commit()
                     embed_text = build_embed_text(result)
 
-                # 长文档分块（段落感知 + 重叠；全文 embedding 之外提供片段级出处）
+                # 统一分块：文档按段落切，音视频按转写时间片切（都保留原文出处）
                 chunk_rows: list[DocumentChunk] = []
                 if modality == "document" and result.text_content:
+                    built = [
+                        {"modality": "document", "text": t}
+                        for t in chunk_text(result.text_content)
+                    ]
+                elif modality in ("audio", "video") and result.transcript_segments:
+                    try:
+                        segs = json.loads(result.transcript_segments or "[]")
+                    except Exception:
+                        segs = []
+                    built = [
+                        {
+                            "modality": modality,
+                            "text": (s.get("text") or "")[:1000],
+                            "start": s.get("start"),
+                            "end": s.get("end"),
+                        }
+                        for s in segs
+                        if s.get("text")
+                    ]
+                else:
+                    built = []
+                if built:
                     with SessionLocal() as db:
                         asset = db.get(Asset, asset_id)
                         if asset is None:
                             return
                         db.query(DocumentChunk).filter(DocumentChunk.asset_id == asset_id).delete()
-                        for seq, text in enumerate(chunk_text(result.text_content)):
-                            db.add(DocumentChunk(asset_id=asset_id, seq=seq, text=text))
+                        for seq, item in enumerate(built):
+                            db.add(
+                                DocumentChunk(
+                                    asset_id=asset_id,
+                                    modality=item["modality"],
+                                    seq=seq,
+                                    text=item["text"],
+                                    start=item.get("start"),
+                                    end=item.get("end"),
+                                )
+                            )
                         db.commit()
                         chunk_rows = (
                             db.query(DocumentChunk)

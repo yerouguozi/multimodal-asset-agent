@@ -1,10 +1,11 @@
-"""片段级检索：chunk 级 BM25 + bge-m3 向量 RRF 融合 → bge-reranker 精排。
+"""片段级检索：文档段落与音视频时间片的统一 chunk 检索。
 
-输出原文段落与出处（asset + chunk seq）。旧数据首次查询自动补分块与向量
-（懒回填），无需重跑流水线。
+BM25 + bge-m3 向量 RRF 融合 → bge-reranker 精排；输出原文与出处
+(asset + seq，时间片附带 start/end)。旧数据首次查询自动懒回填。
 """
 from __future__ import annotations
 
+import json
 import logging
 
 from sqlalchemy.orm import Session
@@ -23,7 +24,7 @@ RERANK_CANDIDATES = 20
 
 
 def ensure_chunks(db: Session, asset: Asset) -> list[DocumentChunk]:
-    """返回资产的 chunk；老数据没有时按正文懒生成并落库。"""
+    """返回资产的 chunk；老数据没有时按正文/转写时间片懒生成并落库。"""
     rows = (
         db.query(DocumentChunk)
         .filter(DocumentChunk.asset_id == asset.id)
@@ -32,13 +33,32 @@ def ensure_chunks(db: Session, asset: Asset) -> list[DocumentChunk]:
     )
     if rows:
         return rows
-    texts = chunk_text(asset.text_content)
     rows = []
-    for seq, text in enumerate(texts):
-        c = DocumentChunk(asset_id=asset.id, seq=seq, text=text)
+    items: list[dict] = []
+    if asset.modality == "document":
+        items = [{"text": t, "start": None, "end": None} for t in chunk_text(asset.text_content)]
+    else:
+        try:
+            segs = json.loads(asset.transcript_segments or "[]")
+        except Exception:
+            segs = []
+        items = [
+            {"text": (s.get("text") or "")[:1000], "start": s.get("start"), "end": s.get("end")}
+            for s in segs
+            if s.get("text")
+        ]
+    for seq, item in enumerate(items):
+        c = DocumentChunk(
+            asset_id=asset.id,
+            modality=asset.modality,
+            seq=seq,
+            text=item["text"],
+            start=item.get("start"),
+            end=item.get("end"),
+        )
         db.add(c)
         rows.append(c)
-    if texts:
+    if items:
         db.commit()
     return rows
 
@@ -79,12 +99,15 @@ def search_passages(
     query = (query or "").strip()
     if not query:
         return []
-    q = db.query(Asset).filter(Asset.status == "ready", Asset.modality == "document")
+    q = db.query(Asset).filter(
+        Asset.status == "ready",
+        Asset.modality.in_(["document", "audio", "video"]),
+    )
     if owner:
         q = q.filter(Asset.owner == owner)
     pairs: list[tuple[Asset, DocumentChunk]] = []
     for asset in q.all():
-        if not asset.text_content:
+        if not asset.text_content and not asset.transcript_segments:
             continue
         for chunk in ensure_chunks(db, asset):
             pairs.append((asset, chunk))
@@ -147,6 +170,8 @@ def search_passages(
                 "name": asset.name,
                 "modality": asset.modality,
                 "text": chunk.text,
+                "start": chunk.start,
+                "end": chunk.end,
                 "score": round(float(score), 4),
             }
         )
