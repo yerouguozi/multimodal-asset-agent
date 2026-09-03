@@ -29,8 +29,10 @@ from sqlalchemy import func
 
 from ..agent.graph import agent_app
 from ..agent.tools import owner_ctx
+from ..core.config import settings
 from ..core.database import SessionLocal
 from ..models import ChatMessage, ChatSession
+from ..usage import ESTIMATED_CALLS, ensure_quota, record_usage
 from .auth import resolve_owner
 
 router = APIRouter(prefix="/api", tags=["chat"])
@@ -165,6 +167,7 @@ def run_agent(
 
 @router.post("/chat")
 async def chat(req: ChatRequest, owner: str = Depends(resolve_owner)):
+    ensure_quota(owner, ESTIMATED_CALLS["chat"])
     message = (req.message or "").strip()
     session_id = req.session_id or "default"
 
@@ -183,7 +186,9 @@ async def chat(req: ChatRequest, owner: str = Depends(resolve_owner)):
 
         async def worker() -> None:
             try:
-                await asyncio.to_thread(run_agent, message, session_id, emit, owner)
+                answer, _, _ = await asyncio.to_thread(run_agent, message, session_id, emit, owner)
+                if answer:
+                    record_usage(None, settings.llm_model, "chat", owner=owner)
             except Exception as e:  # noqa: BLE001 - 网络边界，需兜底
                 emit("error", {"text": f"Agent 执行失败：{e}"})
             finally:

@@ -16,6 +16,7 @@ from ..core.database import get_db
 from ..models import Asset
 from ..pipeline.manager import manager
 from ..schemas import AssetOut, UploadItem, UploadResult
+from ..usage import ESTIMATED_CALLS, ensure_quota
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["upload"])
@@ -62,6 +63,8 @@ async def upload(
     db: Session = Depends(get_db),
     owner: str = Depends(resolve_owner),
 ):
+    estimated = sum(ESTIMATED_CALLS.get(detect_modality(f.content_type, f.filename or "") or "", 1) for f in files)
+    ensure_quota(owner, estimated)
     items: list[UploadItem] = []
     for f in files:
         modality = detect_modality(f.content_type, f.filename or "")

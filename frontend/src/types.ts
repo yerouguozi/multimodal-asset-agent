@@ -64,6 +64,11 @@ export interface UsageSummary {
   total_cost: number;
   by_model: Record<string, number>;
   recent: { asset_id: number | null; model: string; operation: string; cost: number; created_at: string }[];
+  quota?: {
+    daily: { used: number; limit: number; remaining: number };
+    monthly: { used: number; limit: number; remaining: number };
+    hourly: { used: number; limit: number; remaining: number };
+  } | null;
 }
 export interface PlanStep {
   tool: string;

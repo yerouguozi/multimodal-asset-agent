@@ -61,6 +61,11 @@ class Settings(BaseSettings):
     vector_backend: str = "local"
     milvus_uri: str = "http://localhost:19530"
 
+    # 每用户模型调用配额（按 UsageLog 实际记录 + 预检估算）
+    usage_daily_limit: int = 200
+    usage_monthly_limit: int = 2000
+    usage_hourly_limit: int = 100
+
     # JWT（质控平台等外部评测接入）
     jwt_secret: str = "dev-secret-change-me-please-override-32bytes-min"
     jwt_expire_minutes: int = 1440

@@ -2928,6 +2928,10 @@ input:-webkit-autofill:focus {
   word-break: break-all;
 }
 
+.quota-row {
+  color: #a5b4fc;
+}
+
 /* 详情弹窗 v2 */
 .modal-title-wrap {
   display: flex;

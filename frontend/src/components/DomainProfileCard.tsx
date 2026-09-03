@@ -118,6 +118,13 @@ export default function DomainProfileCard({ profile, usage, onRefresh }: Props) 
             </div>
           </div>
 
+          {usage?.quota && (
+            <div className="weights quota-row">
+              配额：今日 {usage.quota.daily.used}/{usage.quota.daily.limit} · 本月{" "}
+              {usage.quota.monthly.used}/{usage.quota.monthly.limit}
+            </div>
+          )}
+
           <div className="weights">
             自适应检索权重
             <code>{JSON.stringify(profile.adaptive_weights)}</code>

@@ -15,6 +15,7 @@ from ..retrieval.passage import search_passages
 from ..retrieval.search_log import record_search
 from ..retrieval.vector_store import vector_store
 from ..schemas import AssetOut, SearchHit, SearchResponse
+from ..usage import ESTIMATED_CALLS, ensure_quota, record_usage
 from .auth import resolve_owner
 
 router = APIRouter(prefix="/api/search", tags=["search"])
@@ -58,6 +59,7 @@ async def search_by_image(
     db: Session = Depends(get_db),
     owner: str = Depends(resolve_owner),
 ):
+    ensure_quota(owner, ESTIMATED_CALLS["image_search"])
     """以图搜图：上传参考图，按视觉相似度检索。"""
     content = await file.read()
     if not content:
@@ -66,6 +68,7 @@ async def search_by_image(
     vec = llm_client.embed_image(b64, file.content_type or "image/jpeg")
     if not vec:
         raise HTTPException(503, "多模态向量不可用（未配置 Key 或模型不可用）")
+    record_usage(None, settings.vl_embedding_model, "image_search", owner=owner)
     hits = vector_store.search(vec, settings.vl_embedding_model, top_k=limit)
     out = []
     for aid, score in hits.items():
