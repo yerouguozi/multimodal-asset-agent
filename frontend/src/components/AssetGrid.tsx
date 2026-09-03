@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import type { ComponentType } from "react";
 import {
   Eye,
@@ -12,6 +13,7 @@ import {
 } from "lucide-react";
 import type { Asset } from "../types";
 import { timeAgoZh } from "../time";
+import { downloadAssetsZip } from "../api";
 
 interface Props {
   assets: Asset[];
@@ -68,6 +70,37 @@ export default function AssetGrid({
   onDelete,
   onReset,
 }: Props) {
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [selectMode, setSelectMode] = useState(false);
+  const [zipping, setZipping] = useState(false);
+
+  useEffect(() => {
+    setSelected(new Set());
+  }, [assets]);
+
+  const toggle = (id: number) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const download = async () => {
+    if (!selected.size || zipping) return;
+    setZipping(true);
+    try {
+      await downloadAssetsZip(Array.from(selected));
+      setSelected(new Set());
+      setSelectMode(false);
+    } catch {
+      window.alert("打包下载失败，请稍后重试");
+    } finally {
+      setZipping(false);
+    }
+  };
+
   if (loading && !assets.length) {
     return (
       <section className="panel grid-panel" aria-busy="true" aria-label="素材加载中">
@@ -108,8 +141,40 @@ export default function AssetGrid({
           素材库 <b>{total}</b>
           {hasFilter && <span className="head-filter">已筛选</span>}
         </span>
-        <span className="head-hint">点击卡片查看详情</span>
+        <span className="head-actions">
+          <button
+            type="button"
+            className={`link-btn${selectMode ? " on" : ""}`}
+            onClick={() => {
+              setSelectMode((v) => !v);
+              setSelected(new Set());
+            }}
+          >
+            {selectMode ? "完成" : "选择"}
+          </button>
+          <span className="head-hint">点击卡片查看详情</span>
+        </span>
       </div>
+      {selectMode && selected.size > 0 && (
+        <div className="bulk-bar">
+          <span>
+            已选 <b>{selected.size}</b> 个素材
+          </span>
+          <span className="bulk-actions">
+            <button type="button" className="btn primary" onClick={() => void download()} disabled={zipping}>
+              {zipping ? "打包中…" : "打包下载"}
+            </button>
+            <button
+              type="button"
+              className="btn soft"
+              onClick={() => setSelected(new Set())}
+              disabled={zipping}
+            >
+              清除选择
+            </button>
+          </span>
+        </div>
+      )}
       <div className="grid">
         {assets.map((a) => (
           <article
@@ -118,6 +183,20 @@ export default function AssetGrid({
             onClick={() => onOpen(a)}
           >
             <div className="asset-thumb">
+              {selectMode && (
+                <button
+                  type="button"
+                  className={`card-select${selected.has(a.id) ? " on" : ""}`}
+                  aria-label={selected.has(a.id) ? `取消选择素材 #${a.id}` : `选择素材 #${a.id}`}
+                  aria-pressed={selected.has(a.id)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggle(a.id);
+                  }}
+                >
+                  <i />
+                </button>
+              )}
               {a.thumbnail_url ? (
                 <img src={a.thumbnail_url} alt={a.name} loading="lazy" />
               ) : (

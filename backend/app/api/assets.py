@@ -1,20 +1,65 @@
-"""素材管理：列表 / 详情 / 改标签 / 删除。"""
+"""素材管理：列表 / 详情 / 改标签 / 删除 / 批量打包下载。"""
 from __future__ import annotations
 
+import io
 import json
+import re
+import zipfile
+from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from .auth import resolve_owner
-from ..core.database import get_db
+from ..core.config import settings
+from ..core.database import SessionLocal, get_db
 from ..models import Asset, Tag
 from ..retrieval.vector_store import vector_store
 from ..schemas import AssetListOut, AssetOut, AssetPatch, AssetStatsOut
-from ..core.config import settings
-from pathlib import Path
+
+
+class DownloadZipBody(BaseModel):
+    ids: list[int] = []
+
+
+def _safe_zip_name(asset: Asset) -> str:
+    name = re.sub(r'[\\/:*?"<>|]', "_", asset.original_filename or asset.name)
+    return f"{asset.id}_{name[:120]}"
+
 
 router = APIRouter(prefix="/api/assets", tags=["assets"])
+
+
+@router.post("/download-zip")
+def download_zip(body: DownloadZipBody, owner: str = Depends(resolve_owner)):
+    """把选中的原始文件打包下载（仅限当前用户自己的素材）。"""
+    ids = list(dict.fromkeys(body.ids))[:200]
+    if not ids:
+        raise HTTPException(400, "请先选择素材")
+    with SessionLocal() as db:
+        assets = (
+            db.query(Asset)
+            .filter(Asset.id.in_(ids), Asset.owner == owner, Asset.status == "ready")
+            .all()
+        )
+        if not assets:
+            raise HTTPException(404, "没有可下载的素材")
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            for a in assets:
+                p = settings.data_dir / a.storage_path
+                try:
+                    if p.is_file() and p.resolve().is_relative_to(settings.data_dir.resolve()):
+                        zf.write(p, _safe_zip_name(a))
+                except OSError:
+                    continue
+    data = buf.getvalue()
+    return Response(
+        content=data,
+        media_type="application/zip",
+        headers={"Content-Disposition": 'attachment; filename="assets.zip"'},
+    )
 
 
 @router.get("", response_model=AssetListOut)

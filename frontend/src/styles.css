@@ -2433,6 +2433,82 @@ input:-webkit-autofill:focus {
   border-color: rgba(239, 68, 68, 0.25);
 }
 
+.head-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.link-btn.on {
+  color: #cfe0ff;
+  background: rgba(79, 124, 255, 0.12);
+  border-radius: 7px;
+}
+
+.bulk-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+  padding: 9px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(122, 166, 255, 0.35);
+  background: rgba(79, 124, 255, 0.09);
+  color: #cdd9ec;
+  font-size: 12.5px;
+  animation: fadeUp 0.2s ease both;
+}
+
+.bulk-bar b {
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+
+.bulk-actions {
+  display: inline-flex;
+  gap: 8px;
+}
+
+.card-select {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 4;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: inline-grid;
+  place-items: center;
+  border: 1.5px solid rgba(255, 255, 255, 0.85);
+  background: rgba(3, 6, 14, 0.55);
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+}
+
+.card-select i {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  background: transparent;
+  transition: background 0.15s ease;
+}
+
+.card-select:hover {
+  transform: scale(1.08);
+}
+
+.card-select.on {
+  background: linear-gradient(135deg, #4f7cff, #8b5cf6);
+  border-color: transparent;
+}
+
+.card-select.on i {
+  background: #fff;
+  clip-path: polygon(15% 52%, 38% 72%, 86% 22%, 100% 34%, 38% 100%, 0 68%);
+}
+
 /* 空态 / 无结果 */
 .empty-state {
   padding: 48px 24px 44px;

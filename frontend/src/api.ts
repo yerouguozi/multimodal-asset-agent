@@ -81,6 +81,24 @@ export function fetchAssetSegments(id: number): Promise<AssetSegments> {
   return apiFetch(`/api/assets/${id}/segments`).then((r) => j<AssetSegments>(r));
 }
 
+export async function downloadAssetsZip(ids: number[]): Promise<void> {
+  const r = await apiFetch("/api/assets/download-zip", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ids }),
+  });
+  if (!r.ok) throw new Error(`HTTP ${r.status}: ${await r.text()}`);
+  const blob = await r.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "assets.zip";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 export function fetchDomainProfile(): Promise<DomainProfile> {
   return apiFetch("/api/domain/profile").then((r) => j<DomainProfile>(r));
 }
