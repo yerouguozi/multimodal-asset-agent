@@ -10,6 +10,9 @@ build/
 # 环境变量
 .env
 
+# 个人简历素材（保留本地，不入库）
+docs/resume-summary.md
+
 # 本地数据与素材
 data/
 uploads/

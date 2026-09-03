@@ -159,5 +159,4 @@ cd backend
 
 ## 文档导航
 
-- [简历项目描述](docs/resume-summary.md)
 - [检索评测报告](docs/eval-reports/检索评测报告.md)
