@@ -12,6 +12,7 @@ build/
 
 # 个人简历素材（保留本地，不入库）
 docs/resume-summary.md
+docs/resume-versions.md
 
 # 本地数据与素材
 data/
