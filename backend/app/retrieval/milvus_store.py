@@ -59,6 +59,17 @@ class MilvusVectorStore:
         names = utility.list_collections(using="mma")
         return [n[len(self.prefix):] for n in names if n.startswith(self.prefix)]
 
+    def keys(self, model: str) -> set[int]:
+        """返回指定模型空间内全部主键（chunk 向量库判断缺失用）。"""
+        try:
+            col = self._collection(model)
+            if col.num_entities == 0:
+                return set()
+            rows = col.query(expr="", output_fields=["asset_id"], limit=16384)
+            return {int(r["asset_id"]) for r in rows}
+        except Exception:
+            return set()
+
     def add(self, asset_id: int, vector: list[float], model: str) -> None:
         col = self._collection(model, dim=len(vector))
         col.insert([[asset_id], [list(vector)]])

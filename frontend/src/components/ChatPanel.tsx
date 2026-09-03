@@ -25,6 +25,7 @@ import type {
   PlanStep,
   TraceAsset,
   TraceMoment,
+  TracePassage,
 } from "../types";
 
 interface Msg {
@@ -37,13 +38,14 @@ interface Msg {
   summary?: string;
   assets?: TraceAsset[];
   moments?: TraceMoment[];
+  passages?: TracePassage[];
   labels?: string[];
   elapsed_ms?: number;
 }
 
 interface Props {
   onComplete?: () => void;
-  onOpenAsset?: (assetId: number) => void;
+  onOpenAsset?: (assetId: number, seek?: number) => void;
 }
 
 const SUGGESTIONS = ["帮我搜「夜景」素材", "我的素材库是什么领域？", "看看 #1 素材"];
@@ -61,7 +63,7 @@ const TOOL_META: Record<
   find_passage: { label: "片段检索", Icon: FileText },
 };
 
-function fmtTs(sec?: number): string {
+function fmtTs(sec?: number | null): string {
   const s = Math.max(0, Math.floor(sec ?? 0));
   return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 }
@@ -162,6 +164,7 @@ export default function ChatPanel({ onComplete, onOpenAsset }: Props) {
               summary: ev.summary,
               assets: ev.assets,
               moments: ev.moments,
+              passages: ev.passages,
               labels: ev.labels,
               elapsed_ms: ev.elapsed_ms,
             },
@@ -261,6 +264,26 @@ export default function ChatPanel({ onComplete, onOpenAsset }: Props) {
                   {mo.end != null ? `-${fmtTs(mo.end)}` : ""}
                 </span>
                 <span className="moment-text">{mo.snippet}</span>
+              </button>
+            ))}
+          </div>
+        )}
+        {m.passages && m.passages.length > 0 && (
+          <div className="trace-moments">
+            {m.passages.map((p, i) => (
+              <button
+                key={`${p.asset_id}-${i}`}
+                type="button"
+                className="moment-ref"
+                onClick={() => onOpenAsset?.(p.asset_id, p.start ?? 0)}
+              >
+                <span className="moment-time">
+                  {fmtTs(p.start)}
+                  {p.end != null ? `-${fmtTs(p.end)}` : ""}
+                </span>
+                <span className="moment-text">
+                  {p.name}：{p.text}
+                </span>
               </button>
             ))}
           </div>

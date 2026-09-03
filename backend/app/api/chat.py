@@ -142,6 +142,7 @@ def run_agent(
                                 "summary": summary,
                                 "assets": result.get("assets", []),
                                 "moments": result.get("moments", []),
+                                "passages": result.get("passages", []),
                                 "labels": result.get("labels", []),
                                 "by_modality": result.get("by_modality", {}),
                                 "elapsed_ms": elapsed_ms,

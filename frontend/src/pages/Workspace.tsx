@@ -29,6 +29,7 @@ export default function Workspace() {
   const [modality, setModality] = useState("");
   const [tag, setTag] = useState("");
   const [selected, setSelected] = useState<Asset | null>(null);
+  const [seekTarget, setSeekTarget] = useState<number | null>(null);
   const [profile, setProfile] = useState<DomainProfile | null>(null);
   const [usage, setUsage] = useState<UsageSummary | null>(null);
   const [notice, setNotice] = useState("");
@@ -182,16 +183,23 @@ export default function Workspace() {
     }
   };
 
-  const openAssetById = useCallback(async (id: number) => {
-    try {
-      const asset = await fetchAsset(id);
-      setSelected(asset);
-    } catch (e) {
-      notify(`加载素材详情失败：${errMsg(e)}`);
-    }
-  }, [notify]);
+  const openAssetById = useCallback(
+    async (id: number, seek?: number) => {
+      try {
+        const asset = await fetchAsset(id);
+        setSeekTarget(seek ?? null);
+        setSelected(asset);
+      } catch (e) {
+        notify(`加载素材详情失败：${errMsg(e)}`);
+      }
+    },
+    [notify]
+  );
 
-  const closeModal = useCallback(() => setSelected(null), []);
+  const closeModal = useCallback(() => {
+    setSelected(null);
+    setSeekTarget(null);
+  }, []);
 
   const handleLogout = () => {
     clearAuth();
@@ -282,14 +290,14 @@ export default function Workspace() {
         <aside className="right">
           <ChatPanel
             onComplete={() => { void load(); refreshMeta(); }}
-            onOpenAsset={(id) => void openAssetById(id)}
+            onOpenAsset={(id, seek) => void openAssetById(id, seek)}
           />
           <DomainProfileCard profile={profile} usage={usage} onRefresh={refreshMeta} />
         </aside>
       </main>
 
       {selected && (
-        <AssetDetailModal asset={selected} onClose={closeModal} onDelete={handleDelete} />
+        <AssetDetailModal asset={selected} initialSeek={seekTarget} onClose={closeModal} onDelete={handleDelete} />
       )}
     </div>
   );

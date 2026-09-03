@@ -86,6 +86,16 @@ export interface TraceMoment {
   snippet: string;
 }
 
+export interface TracePassage {
+  asset_id: number;
+  name: string;
+  seq: number;
+  start?: number | null;
+  end?: number | null;
+  text: string;
+  score?: number;
+}
+
 export interface ChatEvent {
   stage?: string;
   content?: string;
@@ -98,6 +108,7 @@ export interface ChatEvent {
   summary?: string;
   assets?: TraceAsset[];
   moments?: TraceMoment[];
+  passages?: TracePassage[];
   labels?: string[];
   by_modality?: Record<string, number>;
   elapsed_ms?: number;

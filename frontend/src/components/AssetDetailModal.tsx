@@ -20,6 +20,7 @@ import { fetchAssetSegments } from "../api";
 
 interface Props {
   asset: Asset;
+  initialSeek?: number | null;
   onClose: () => void;
   onDelete: (id: number) => void;
 }
@@ -59,12 +60,23 @@ function fmtTs(sec?: number): string {
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
-export default function AssetDetailModal({ asset, onClose, onDelete }: Props) {
+export default function AssetDetailModal({ asset, initialSeek, onClose, onDelete }: Props) {
   const modalRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const [segments, setSegments] = useState<TranscriptSegment[]>([]);
+
+  useEffect(() => {
+    if (initialSeek == null) return;
+    const el = videoRef.current ?? audioRef.current;
+    if (!el) return;
+    const apply = () => {
+      el.currentTime = initialSeek;
+    };
+    el.addEventListener("loadedmetadata", apply);
+    return () => el.removeEventListener("loadedmetadata", apply);
+  }, [initialSeek, asset.id]);
 
   useEffect(() => {
     const prev = document.activeElement as HTMLElement | null;
