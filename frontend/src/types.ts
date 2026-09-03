@@ -64,9 +64,56 @@ export interface UsageSummary {
   by_model: Record<string, number>;
   recent: { asset_id: number | null; model: string; operation: string; cost: number; created_at: string }[];
 }
+export interface PlanStep {
+  tool: string;
+  args?: Record<string, unknown>;
+}
+
+export interface TraceAsset {
+  id: number;
+  name: string;
+  modality?: string;
+  description?: string | null;
+  tags?: string[];
+}
+
+export interface TraceMoment {
+  asset_id: number;
+  name: string;
+  start: number;
+  end?: number | null;
+  snippet: string;
+}
+
 export interface ChatEvent {
   stage?: string;
   content?: string;
   text?: string;
   session_id?: string;
+  intent?: string;
+  steps?: PlanStep[];
+  tool?: string;
+  ok?: boolean;
+  summary?: string;
+  assets?: TraceAsset[];
+  moments?: TraceMoment[];
+  labels?: string[];
+  by_modality?: Record<string, number>;
+  elapsed_ms?: number;
+}
+
+export interface ChatSessionSummary {
+  id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+  message_count: number;
+  last_message?: string | null;
+}
+
+export interface ChatMessageRecord {
+  id: number;
+  role: string;
+  content: string;
+  created_at: string;
 }

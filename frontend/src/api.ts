@@ -1,6 +1,8 @@
 import type {
   Asset,
   AssetList,
+  ChatMessageRecord,
+  ChatSessionSummary,
   ChatEvent,
   DomainProfile,
   SearchHit,
@@ -59,6 +61,18 @@ export async function searchByImage(file: File): Promise<SearchHit[]> {
 
 export function fetchUsageSummary(): Promise<UsageSummary> {
   return fetch("/api/usage/summary").then((r) => j<UsageSummary>(r));
+}
+
+export function fetchChatSessions(): Promise<ChatSessionSummary[]> {
+  return fetch("/api/chat/sessions")
+    .then((r) => j<{ sessions: ChatSessionSummary[] }>(r))
+    .then((d) => d.sessions);
+}
+
+export function fetchChatMessages(sessionId: string): Promise<ChatMessageRecord[]> {
+  return fetch(`/api/chat/sessions/${encodeURIComponent(sessionId)}/messages`)
+    .then((r) => j<{ messages: ChatMessageRecord[] }>(r))
+    .then((d) => d.messages);
 }
 
 export async function chatStream(

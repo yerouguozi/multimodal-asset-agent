@@ -4,6 +4,7 @@ import { ArrowLeft, FolderGit, X } from "lucide-react";
 import {
   deleteAsset,
   fetchAssets,
+  fetchAsset,
   fetchDomainProfile,
   searchAssets,
   searchByImage,
@@ -178,6 +179,15 @@ export default function Workspace() {
     }
   };
 
+  const openAssetById = useCallback(async (id: number) => {
+    try {
+      const asset = await fetchAsset(id);
+      setSelected(asset);
+    } catch (e) {
+      notify(`加载素材详情失败：${errMsg(e)}`);
+    }
+  }, [notify]);
+
   const closeModal = useCallback(() => setSelected(null), []);
 
   const hasFilter = Boolean(query.trim() || modality || tag || imageSearched);
@@ -242,7 +252,10 @@ export default function Workspace() {
         </section>
 
         <aside className="right">
-          <ChatPanel onComplete={() => { void load(); refreshMeta(); }} />
+          <ChatPanel
+            onComplete={() => { void load(); refreshMeta(); }}
+            onOpenAsset={(id) => void openAssetById(id)}
+          />
           <DomainProfileCard profile={profile} usage={usage} onRefresh={refreshMeta} />
         </aside>
       </main>
