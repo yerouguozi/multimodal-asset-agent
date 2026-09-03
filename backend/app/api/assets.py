@@ -14,9 +14,11 @@ from sqlalchemy.orm import Session
 from .auth import resolve_owner
 from ..core.config import settings
 from ..core.database import SessionLocal, get_db
-from ..models import Asset, Tag
+from ..models import Asset, Tag, utcnow
+from ..pipeline.manager import manager
 from ..retrieval.vector_store import vector_store
 from ..schemas import AssetListOut, AssetOut, AssetPatch, AssetStatsOut
+from ..usage import ESTIMATED_CALLS, ensure_quota
 
 
 class DownloadZipBody(BaseModel):
@@ -41,6 +43,7 @@ def download_zip(body: DownloadZipBody, owner: str = Depends(resolve_owner)):
         assets = (
             db.query(Asset)
             .filter(Asset.id.in_(ids), Asset.owner == owner, Asset.status == "ready")
+            .filter(Asset.deleted_at.is_(None))
             .all()
         )
         if not assets:
@@ -62,17 +65,69 @@ def download_zip(body: DownloadZipBody, owner: str = Depends(resolve_owner)):
     )
 
 
+@router.get("/trash")
+def list_trash(db: Session = Depends(get_db), owner: str = Depends(resolve_owner)):
+    items = (
+        db.query(Asset)
+        .filter(Asset.owner == owner, Asset.deleted_at.is_not(None))
+        .order_by(Asset.deleted_at.desc())
+        .all()
+    )
+    return {"items": [AssetOut.model_validate(a) for a in items], "total": len(items)}
+
+
+@router.post("/trash/{asset_id}/restore", response_model=AssetOut)
+def restore_asset(asset_id: int, db: Session = Depends(get_db), owner: str = Depends(resolve_owner)):
+    asset = (
+        db.query(Asset)
+        .filter(Asset.id == asset_id, Asset.owner == owner, Asset.deleted_at.is_not(None))
+        .first()
+    )
+    if asset is None:
+        raise HTTPException(404, "回收站中没有该素材")
+    asset.deleted_at = None
+    db.commit()
+    db.expire_all()
+    return db.query(Asset).filter(Asset.id == asset_id).first()
+
+
+@router.delete("/trash/{asset_id}")
+def purge_asset(asset_id: int, db: Session = Depends(get_db), owner: str = Depends(resolve_owner)):
+    """彻底删除：移除磁盘文件与向量，不可恢复。"""
+    asset = (
+        db.query(Asset)
+        .filter(Asset.id == asset_id, Asset.owner == owner, Asset.deleted_at.is_not(None))
+        .first()
+    )
+    if asset is None:
+        raise HTTPException(404, "回收站中没有该素材")
+    for rel in (asset.storage_path, asset.thumbnail_path):
+        if not rel:
+            continue
+        p = settings.data_dir / rel
+        try:
+            p.unlink(missing_ok=True)
+        except OSError:
+            pass
+    vector_store.delete(asset_id)
+    db.delete(asset)
+    db.commit()
+    return {"ok": True, "id": asset_id}
+
+
 @router.get("", response_model=AssetListOut)
 def list_assets(
     modality: str | None = None,
     tag: str | None = None,
     status: str | None = None,
+    deleted: bool = False,
     page: int = 1,
     page_size: int = 20,
     db: Session = Depends(get_db),
     owner: str = Depends(resolve_owner),
 ):
     q = db.query(Asset).filter(Asset.owner == owner)
+    q = q.filter(Asset.deleted_at.is_not(None)) if deleted else q.filter(Asset.deleted_at.is_(None))
     if modality:
         q = q.filter(Asset.modality == modality)
     if status:
@@ -91,7 +146,11 @@ def list_assets(
 
 @router.get("/{asset_id}", response_model=AssetOut)
 def get_asset(asset_id: int, db: Session = Depends(get_db), owner: str = Depends(resolve_owner)):
-    asset = db.query(Asset).filter(Asset.id == asset_id, Asset.owner == owner).first()
+    asset = (
+        db.query(Asset)
+        .filter(Asset.id == asset_id, Asset.owner == owner, Asset.deleted_at.is_(None))
+        .first()
+    )
     if asset is None:
         raise HTTPException(404, "素材不存在")
     return asset
@@ -104,7 +163,11 @@ def get_asset_segments(
     owner: str = Depends(resolve_owner),
 ):
     """返回音视频转写片断（供播放器时间戳跳转）。"""
-    asset = db.query(Asset).filter(Asset.id == asset_id, Asset.owner == owner).first()
+    asset = (
+        db.query(Asset)
+        .filter(Asset.id == asset_id, Asset.owner == owner, Asset.deleted_at.is_(None))
+        .first()
+    )
     if asset is None:
         raise HTTPException(404, "素材不存在")
     try:
@@ -129,7 +192,11 @@ def patch_asset(
     db: Session = Depends(get_db),
     owner: str = Depends(resolve_owner),
 ):
-    asset = db.query(Asset).filter(Asset.id == asset_id, Asset.owner == owner).first()
+    asset = (
+        db.query(Asset)
+        .filter(Asset.id == asset_id, Asset.owner == owner, Asset.deleted_at.is_(None))
+        .first()
+    )
     if asset is None:
         raise HTTPException(404, "素材不存在")
     if body.name is not None and body.name.strip():
@@ -164,26 +231,51 @@ def delete_asset(
     asset = db.query(Asset).filter(Asset.id == asset_id, Asset.owner == owner).first()
     if asset is None:
         raise HTTPException(404, "素材不存在")
-    # 删除磁盘文件
-    for rel in (asset.storage_path, asset.thumbnail_path):
-        if not rel:
-            continue
-        p = settings.data_dir / rel
-        try:
-            p.unlink(missing_ok=True)
-        except OSError:
-            pass
-    vector_store.delete(asset_id)
-    db.delete(asset)
+    # 软删除：先进回收站（文件与向量保留，恢复零成本）
+    asset.deleted_at = utcnow()
     db.commit()
-    return {"ok": True, "id": asset_id}
+    return {"ok": True, "id": asset_id, "trashed": True}
+
+
+@router.post("/{asset_id}/retry", response_model=AssetOut)
+async def retry_asset(
+    asset_id: int,
+    db: Session = Depends(get_db),
+    owner: str = Depends(resolve_owner),
+):
+    asset = (
+        db.query(Asset)
+        .filter(Asset.id == asset_id, Asset.owner == owner, Asset.deleted_at.is_(None))
+        .first()
+    )
+    if asset is None:
+        raise HTTPException(404, "素材不存在")
+    if asset.status != "failed":
+        raise HTTPException(400, "仅失败素材可重试")
+    ensure_quota(owner, ESTIMATED_CALLS.get(asset.modality, 1))
+    asset.status = "pending"
+    asset.error_message = None
+    db.commit()
+    try:
+        await manager.submit(asset_id)
+    except Exception as e:
+        asset.status = "failed"
+        asset.error_message = f"重试入队失败: {e}"
+        db.commit()
+        raise HTTPException(500, f"重试入队失败: {e}")
+    db.expire_all()
+    return db.query(Asset).filter(Asset.id == asset_id).first()
 
 
 @router.get("/stats/overview", response_model=AssetStatsOut)
 def stats(db: Session = Depends(get_db), owner: str = Depends(resolve_owner)):
     from collections import Counter
 
-    assets = db.query(Asset).filter(Asset.owner == owner).all()
+    assets = (
+        db.query(Asset)
+        .filter(Asset.owner == owner, Asset.deleted_at.is_(None))
+        .all()
+    )
     by_modality = Counter(a.modality for a in assets)
     by_status = Counter(a.status for a in assets)
     tag_counter: Counter[str] = Counter()

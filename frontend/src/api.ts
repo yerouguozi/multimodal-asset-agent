@@ -24,6 +24,13 @@ export function getUser(): string | null {
   return localStorage.getItem(USER_KEY);
 }
 
+export function mediaHref(url?: string | null): string | undefined {
+  if (!url) return undefined;
+  if (!url.startsWith("/media/")) return url;
+  const token = getToken();
+  return token ? `${url}${url.includes("?") ? "&" : "?"}token=${encodeURIComponent(token)}` : url;
+}
+
 export function setAuth(token: string, username: string): void {
   localStorage.setItem(TOKEN_KEY, token);
   localStorage.setItem(USER_KEY, username);
@@ -46,10 +53,13 @@ async function j<T>(r: Response): Promise<T> {
   return r.json() as Promise<T>;
 }
 
-export function fetchAssets(opts: { modality?: string; tag?: string; pageSize?: number } = {}): Promise<AssetList> {
+export function fetchAssets(
+  opts: { modality?: string; tag?: string; pageSize?: number; deleted?: boolean } = {}
+): Promise<AssetList> {
   const p = new URLSearchParams();
   if (opts.modality) p.set("modality", opts.modality);
   if (opts.tag) p.set("tag", opts.tag);
+  if (opts.deleted) p.set("deleted", "true");
   p.set("page_size", String(opts.pageSize ?? 50));
   return apiFetch(`/api/assets?${p}`).then((r) => j<AssetList>(r));
 }
@@ -71,6 +81,18 @@ export async function uploadFiles(files: File[]): Promise<UploadItem[]> {
 
 export function deleteAsset(id: number): Promise<void> {
   return apiFetch(`/api/assets/${id}`, { method: "DELETE" }).then(() => undefined);
+}
+
+export function restoreAsset(id: number): Promise<Asset> {
+  return apiFetch(`/api/assets/trash/${id}/restore`, { method: "POST" }).then((r) => j<Asset>(r));
+}
+
+export function purgeAsset(id: number): Promise<void> {
+  return apiFetch(`/api/assets/trash/${id}`, { method: "DELETE" }).then(() => undefined);
+}
+
+export function retryAsset(id: number): Promise<Asset> {
+  return apiFetch(`/api/assets/${id}/retry`, { method: "POST" }).then((r) => j<Asset>(r));
 }
 
 export function fetchAsset(id: number): Promise<Asset> {

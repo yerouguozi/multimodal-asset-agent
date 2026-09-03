@@ -72,7 +72,11 @@ async def search_by_image(
     hits = vector_store.search(vec, settings.vl_embedding_model, top_k=limit)
     out = []
     for aid, score in hits.items():
-        asset = db.query(Asset).filter(Asset.id == aid, Asset.owner == owner).first()
+        asset = (
+            db.query(Asset)
+            .filter(Asset.id == aid, Asset.owner == owner, Asset.deleted_at.is_(None))
+            .first()
+        )
         if asset:
             out.append({"asset": AssetOut.model_validate(asset), "score": round(score, 4)})
     return {"hits": out}
@@ -90,7 +94,11 @@ def search_transcript(
     q = (q or "").strip()
     if not q:
         raise HTTPException(400, "q 不能为空")
-    assets = db.query(Asset).filter(Asset.status == "ready", Asset.owner == owner).all()
+    assets = (
+        db.query(Asset)
+        .filter(Asset.status == "ready", Asset.owner == owner, Asset.deleted_at.is_(None))
+        .all()
+    )
     if modality:
         assets = [a for a in assets if a.modality == modality]
     hits = []

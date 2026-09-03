@@ -101,7 +101,7 @@ def search(
     if not query:
         return []
 
-    q = db.query(Asset).filter(Asset.status == "ready")
+    q = db.query(Asset).filter(Asset.status == "ready", Asset.deleted_at.is_(None))
     if owner:
         q = q.filter(Asset.owner == owner)
     assets = q.all()

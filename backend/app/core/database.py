@@ -53,6 +53,8 @@ def _migrate_columns() -> None:
                 conn.execute(text("ALTER TABLE assets ADD COLUMN vision_model VARCHAR(120)"))
             if "transcript_segments" not in cols:
                 conn.execute(text("ALTER TABLE assets ADD COLUMN transcript_segments TEXT"))
+            if "deleted_at" not in cols:
+                conn.execute(text("ALTER TABLE assets ADD COLUMN deleted_at DATETIME"))
             try:
                 cols = {c["name"] for c in inspect(engine).get_columns("document_chunks")}
                 if "modality" not in cols:

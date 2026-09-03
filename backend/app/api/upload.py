@@ -80,7 +80,7 @@ async def upload(
         digest = _sha256(content)
         existing = (
             db.query(Asset)
-            .filter(Asset.sha256 == digest, Asset.owner == owner)
+            .filter(Asset.sha256 == digest, Asset.owner == owner, Asset.deleted_at.is_(None))
             .first()
         )
         if existing:

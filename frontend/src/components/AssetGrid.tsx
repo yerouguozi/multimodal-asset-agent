@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import type { Asset } from "../types";
 import { timeAgoZh } from "../time";
-import { downloadAssetsZip } from "../api";
+import { downloadAssetsZip, mediaHref } from "../api";
 
 interface Props {
   assets: Asset[];
@@ -208,7 +208,7 @@ export default function AssetGrid({
                 </button>
               )}
               {a.thumbnail_url ? (
-                <img src={a.thumbnail_url} alt={a.name} loading="lazy" />
+                <img src={mediaHref(a.thumbnail_url)} alt={a.name} loading="lazy" />
               ) : (
                 <div className="thumb-placeholder">
                   <ModalityIcon modality={a.modality} size={22} />

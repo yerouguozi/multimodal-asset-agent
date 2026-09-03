@@ -63,7 +63,11 @@ def get_asset_detail(asset_id: int) -> dict:
     with SessionLocal() as db:
         asset = (
             db.query(Asset)
-            .filter(Asset.id == asset_id, Asset.owner == owner_ctx.get())
+            .filter(
+                Asset.id == asset_id,
+                Asset.owner == owner_ctx.get(),
+                Asset.deleted_at.is_(None),
+            )
             .first()
         )
         if asset is None:
@@ -171,7 +175,11 @@ def transform_asset(asset_id: int, operation: str, params: dict | None = None) -
     with SessionLocal() as db:
         src = (
             db.query(Asset)
-            .filter(Asset.id == asset_id, Asset.owner == owner_ctx.get())
+            .filter(
+                Asset.id == asset_id,
+                Asset.owner == owner_ctx.get(),
+                Asset.deleted_at.is_(None),
+            )
             .first()
         )
         if src is None:
@@ -243,7 +251,11 @@ def find_moment(query: str) -> dict:
     with SessionLocal() as db:
         assets = (
             db.query(Asset)
-            .filter(Asset.status == "ready", Asset.owner == owner_ctx.get())
+            .filter(
+                Asset.status == "ready",
+                Asset.owner == owner_ctx.get(),
+                Asset.deleted_at.is_(None),
+            )
             .all()
         )
         moments = []

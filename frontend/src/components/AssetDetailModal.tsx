@@ -18,8 +18,7 @@ import {
 } from "lucide-react";
 import type { Asset } from "../types";
 import type { TranscriptSegment } from "../types";
-import { fetchAssetSegments } from "../api";
-import { patchAsset } from "../api";
+import { fetchAssetSegments, mediaHref, patchAsset, retryAsset } from "../api";
 import { fmtDateTime } from "../time";
 
 interface Props {
@@ -68,6 +67,7 @@ export default function AssetDetailModal({ asset, initialSeek, onClose, onDelete
   const [draftName, setDraftName] = useState(asset.name);
   const [draftDesc, setDraftDesc] = useState(asset.description ?? "");
   const [saving, setSaving] = useState(false);
+  const [retrying, setRetrying] = useState(false);
 
   useEffect(() => {
     if (initialSeek == null) return;
@@ -158,6 +158,19 @@ export default function AssetDetailModal({ asset, initialSeek, onClose, onDelete
       window.alert("保存失败，请重试");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const retry = async () => {
+    if (retrying) return;
+    setRetrying(true);
+    try {
+      const updated = await retryAsset(asset.id);
+      onUpdated?.(updated);
+    } catch {
+      window.alert("重试失败，请稍后再试");
+    } finally {
+      setRetrying(false);
     }
   };
 
@@ -266,19 +279,19 @@ export default function AssetDetailModal({ asset, initialSeek, onClose, onDelete
               <video
                 ref={videoRef}
                 className="modal-media"
-                src={asset.media_url}
-                poster={asset.thumbnail_url ?? undefined}
+                src={mediaHref(asset.media_url)}
+                poster={mediaHref(asset.thumbnail_url)}
                 controls
                 preload="metadata"
               />
             </div>
           ) : asset.modality === "audio" && asset.media_url ? (
             <div className="modal-preview">
-              <audio ref={audioRef} className="modal-media audio" src={asset.media_url} controls preload="metadata" />
+              <audio ref={audioRef} className="modal-media audio" src={mediaHref(asset.media_url)} controls preload="metadata" />
             </div>
           ) : asset.thumbnail_url ? (
             <div className="modal-preview">
-              <img src={asset.thumbnail_url} alt={asset.name} />
+              <img src={mediaHref(asset.thumbnail_url)} alt={asset.name} />
             </div>
           ) : null}
 
@@ -362,12 +375,17 @@ export default function AssetDetailModal({ asset, initialSeek, onClose, onDelete
           {asset.media_url && (
             <a
               className="btn soft"
-              href={asset.media_url}
+              href={mediaHref(asset.media_url)}
               download={asset.original_filename || asset.name}
             >
               <Download size={14} />
               下载原文件
             </a>
+          )}
+          {asset.status === "failed" && (
+            <button type="button" className="btn soft" onClick={() => void retry()} disabled={retrying}>
+              {retrying ? "重试中…" : "重试处理"}
+            </button>
           )}
           <button type="button" className="btn soft" onClick={onClose}>
             关闭

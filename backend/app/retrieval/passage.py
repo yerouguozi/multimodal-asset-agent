@@ -102,6 +102,7 @@ def search_passages(
     q = db.query(Asset).filter(
         Asset.status == "ready",
         Asset.modality.in_(["document", "audio", "video"]),
+        Asset.deleted_at.is_(None),
     )
     if owner:
         q = q.filter(Asset.owner == owner)

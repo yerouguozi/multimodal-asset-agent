@@ -2509,6 +2509,48 @@ input:-webkit-autofill:focus {
   clip-path: polygon(15% 52%, 38% 72%, 86% 22%, 100% 34%, 38% 100%, 0 68%);
 }
 
+.trash-panel {
+  max-width: 1560px;
+  margin: 14px auto 0;
+}
+
+.trash-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.trash-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 11px;
+  border: 1px solid var(--border);
+  background: rgba(4, 8, 18, 0.35);
+}
+
+.trash-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #dce6f5;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trash-meta {
+  color: var(--faint);
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.trash-item .bulk-actions {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
 /* 空态 / 无结果 */
 .empty-state {
   padding: 48px 24px 44px;

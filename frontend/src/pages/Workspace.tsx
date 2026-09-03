@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { Activity, ArrowLeft, FolderGit, LogOut, UserCircle2, X } from "lucide-react";
+import { Activity, ArrowLeft, FolderGit, LogOut, Trash2, UserCircle2, X } from "lucide-react";
 import {
   clearAuth,
   deleteAsset,
@@ -12,6 +12,8 @@ import {
   searchByImage,
   uploadFiles,
   fetchUsageSummary,
+  restoreAsset,
+  purgeAsset,
 } from "../api";
 import type { Asset, DomainProfile, UsageSummary } from "../types";
 import AssetDetailModal from "../components/AssetDetailModal";
@@ -36,6 +38,9 @@ export default function Workspace() {
   const [busy, setBusy] = useState(false);
   const [gridLoading, setGridLoading] = useState(true);
   const [imageSearched, setImageSearched] = useState(false);
+  const [showTrash, setShowTrash] = useState(false);
+  const [trashItems, setTrashItems] = useState<Asset[]>([]);
+  const [trashBusy, setTrashBusy] = useState(false);
   const timerRef = useRef<number | undefined>(undefined);
 
   const notify = useCallback((m: string) => {
@@ -122,6 +127,46 @@ export default function Workspace() {
     }
   };
 
+  const refreshTrash = useCallback(async () => {
+    try {
+      const data = await fetchAssets({ pageSize: 100, deleted: true });
+      setTrashItems(data.items);
+    } catch {
+      setTrashItems([]);
+    }
+  }, []);
+
+  const toggleTrash = async () => {
+    const next = !showTrash;
+    setShowTrash(next);
+    if (next) {
+      setTrashBusy(true);
+      await refreshTrash();
+      setTrashBusy(false);
+    }
+  };
+
+  const trashAction = async (id: number, restore: boolean) => {
+    setTrashBusy(true);
+    try {
+      if (restore) {
+        await restoreAsset(id);
+        notify(`已恢复素材 #${id}`);
+      } else {
+        if (!window.confirm("彻底删除后文件与向量都会被移除，且不可恢复。确定？")) return;
+        await purgeAsset(id);
+        notify(`已彻底删除 #${id}`);
+      }
+      await refreshTrash();
+      void load();
+      refreshMeta();
+    } catch (e) {
+      notify(`操作失败：${errMsg(e)}`);
+    } finally {
+      setTrashBusy(false);
+    }
+  };
+
   const handleReset = () => {
     setQuery("");
     setModality("");
@@ -175,7 +220,7 @@ export default function Workspace() {
     try {
       await deleteAsset(id);
       if (selected?.id === id) setSelected(null);
-      notify(`已删除 #${id}`);
+      notify(`已删除 #${id}（可在回收站恢复）`);
       await load();
       refreshMeta();
     } catch (e) {
@@ -241,6 +286,10 @@ export default function Workspace() {
               登录
             </Link>
           )}
+          <button type="button" className="ghost-chip" onClick={() => void toggleTrash()}>
+            <Trash2 size={14} />
+            回收站{trashItems.length > 0 ? ` (${trashItems.length})` : ""}
+          </button>
           <a
             className="ghost-chip"
             href="https://github.com/yerouguozi/multimodal-asset-agent"
@@ -268,6 +317,53 @@ export default function Workspace() {
             <X size={14} />
           </button>
         </div>
+      )}
+
+      {showTrash && (
+        <section className="panel trash-panel">
+          <div className="panel-head">
+            <b>回收站</b>
+            <button type="button" className="icon-btn sm" onClick={() => void toggleTrash()} aria-label="关闭回收站">
+              <X size={14} />
+            </button>
+          </div>
+          {trashBusy && trashItems.length === 0 ? (
+            <div className="empty">加载中…</div>
+          ) : trashItems.length === 0 ? (
+            <div className="empty">回收站是空的</div>
+          ) : (
+            <div className="trash-list">
+              {trashItems.map((a) => (
+                <div key={a.id} className="trash-item">
+                  <span className="trash-name">
+                    #{a.id} {a.name}
+                  </span>
+                  <span className="trash-meta">
+                    {a.modality} · 删除后可恢复
+                  </span>
+                  <span className="bulk-actions">
+                    <button
+                      type="button"
+                      className="btn soft"
+                      onClick={() => void trashAction(a.id, true)}
+                      disabled={trashBusy}
+                    >
+                      恢复
+                    </button>
+                    <button
+                      type="button"
+                      className="btn danger"
+                      onClick={() => void trashAction(a.id, false)}
+                      disabled={trashBusy}
+                    >
+                      彻底删除
+                    </button>
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
       )}
 
       <main className="layout">
