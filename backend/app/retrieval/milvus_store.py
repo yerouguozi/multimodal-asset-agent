@@ -95,13 +95,19 @@ class MilvusVectorStore:
         return {int(h.entity.get("asset_id")): float(h.distance) for h in res[0]}
 
     def delete(self, asset_id: int) -> None:
+        self.delete_ids([asset_id])
+
+    def delete_ids(self, ids: list[int]) -> None:
         from pymilvus import Collection, utility
 
+        if not ids:
+            return
+        expr = f"asset_id in {list(int(i) for i in ids)}"
         for name in utility.list_collections(using="mma"):
             if not name.startswith(self.prefix):
                 continue
             col = Collection(name, using="mma")
-            col.delete(f"asset_id == {asset_id}")
+            col.delete(expr)
             col.flush()
 
     def clear(self) -> None:

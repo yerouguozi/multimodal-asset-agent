@@ -36,14 +36,42 @@ class IngestionManager:
 
     async def start(self) -> None:
         self._loop = asyncio.get_running_loop()
+        # 上次进程退出会丢掉队列，先把卡在 pending/processing 的素材救回来
+        recovered = self.recover_interrupted()
         if settings.ingestion_mode == "async" and not self._workers:
             for _ in range(settings.worker_count):
                 self._workers.append(asyncio.create_task(self._worker(), name="ingestion-worker"))
+        if recovered:
+            logger.info("启动恢复：%d 个中断素材已重新入队", recovered)
 
     async def stop(self) -> None:
         for w in self._workers:
             w.cancel()
+        await asyncio.gather(*self._workers, return_exceptions=True)
         self._workers.clear()
+
+    def recover_interrupted(self) -> int:
+        """把上次进程退出时卡在 pending/processing 的素材恢复。
+
+        async 模式重新入队自动续跑；sync 模式没有后台 worker，
+        标记为 failed 走既有的重试入口，避免永远停在 processing。
+        """
+        with SessionLocal() as db:
+            stuck = db.query(Asset).filter(Asset.status.in_(["pending", "processing"])).all()
+            ids = [a.id for a in stuck]
+            if settings.ingestion_mode == "async":
+                for a in stuck:
+                    a.status = "pending"
+                    a.error_message = None
+            else:
+                for a in stuck:
+                    a.status = "failed"
+                    a.error_message = "服务重启导致处理中断，可点击重试"
+            db.commit()
+        if settings.ingestion_mode == "async":
+            for aid in ids:
+                self._queue.put_nowait(aid)
+        return len(ids)
 
     # ---------- 入口 ----------
 
@@ -156,11 +184,11 @@ class IngestionManager:
                             .all()
                         )
 
-                # 片段向量化（bge-m3；失败仅降级关键词片段检索，不影响入库）
+                # 片段向量化（bge-m3 分批；失败仅降级关键词片段检索，不影响入库）
                 if chunk_rows:
                     try:
                         texts = [c.text for c in chunk_rows]
-                        vecs = await asyncio.to_thread(llm_client.embed_texts, texts)
+                        vecs = await asyncio.to_thread(llm_client.embed_texts_batched, texts)
                         if vecs:
                             for c, v in zip(chunk_rows, vecs):
                                 chunk_vector_store.add(c.id, v, settings.embedding_model)

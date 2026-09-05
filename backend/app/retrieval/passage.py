@@ -16,6 +16,7 @@ from ..models import Asset, DocumentChunk
 from ..pipeline.chunking import chunk_text
 from .bm25 import BM25, tokenize
 from .chunk_vector import chunk_vector_store
+from .index_cache import chunk_tokens
 
 logger = logging.getLogger(__name__)
 
@@ -70,8 +71,8 @@ def _ensure_chunk_vectors(chunks: list[DocumentChunk]) -> None:
     if not missing:
         return
     try:
-        texts = [c.text for c in missing]
-        vecs = llm_client.embed_texts(texts)
+        # 分批嵌入：chunk 多时单批超限不会拖垮整批
+        vecs = llm_client.embed_texts_batched([c.text for c in missing])
         if vecs:
             for c, v in zip(missing, vecs):
                 chunk_vector_store.add(c.id, v, model)
@@ -99,30 +100,53 @@ def search_passages(
     query = (query or "").strip()
     if not query:
         return []
-    q = db.query(Asset).filter(
+    q = db.query(Asset.id, Asset.name, Asset.modality).filter(
         Asset.status == "ready",
         Asset.modality.in_(["document", "audio", "video"]),
         Asset.deleted_at.is_(None),
     )
     if owner:
         q = q.filter(Asset.owner == owner)
-    pairs: list[tuple[Asset, DocumentChunk]] = []
-    for asset in q.all():
-        if not asset.text_content and not asset.transcript_segments:
-            continue
-        for chunk in ensure_chunks(db, asset):
-            pairs.append((asset, chunk))
+    light = q.all()
+    if not light:
+        return []
+    by_id = {a.id: a for a in light}
+    asset_ids = list(by_id)
+
+    # 已有 chunk 的一次查出（替代逐素材 N+1 查询）；
+    # 只有缺 chunk 的旧数据才加载整行做懒回填，避免每次查询全量拉正文大文本
+    have = {
+        row[0]
+        for row in db.query(DocumentChunk.asset_id)
+        .filter(DocumentChunk.asset_id.in_(asset_ids))
+        .distinct()
+        .all()
+    }
+    need_backfill = [i for i in asset_ids if i not in have]
+    if need_backfill:
+        for asset in db.query(Asset).filter(Asset.id.in_(need_backfill)).all():
+            ensure_chunks(db, asset)
+    chunk_rows = (
+        db.query(DocumentChunk)
+        .filter(DocumentChunk.asset_id.in_(asset_ids))
+        .order_by(DocumentChunk.seq.asc())
+        .all()
+    )
+    pairs = []
+    for chunk in chunk_rows:
+        light_asset = by_id.get(chunk.asset_id)
+        if light_asset is not None:
+            pairs.append((light_asset, chunk))
     if not pairs:
         return []
 
     _ensure_chunk_vectors([c for _, c in pairs])
     chunk_ids = {c.id for _, c in pairs}
+    name_toks = {aid: tokenize(a.name) for aid, a in by_id.items()}
     docs_tokens: list[tuple[int, dict[str, float]]] = []
     for asset, chunk in pairs:
-        freq: dict[str, float] = {}
-        for tok in tokenize(chunk.text):
-            freq[tok] = freq.get(tok, 0.0) + 1.0
-        for tok in tokenize(asset.name):
+        freq: dict[str, float] = {t: 1.0 for t in chunk_tokens(chunk)}
+        for tok in name_toks[chunk.asset_id]:
             freq[tok] = freq.get(tok, 0.0) + 1.5
         docs_tokens.append((chunk.id, freq))
 

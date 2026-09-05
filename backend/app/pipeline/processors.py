@@ -108,17 +108,23 @@ def _slice_audio(src: Path, start: float, duration: float, out: Path) -> Path | 
 
 
 def _transcribe_segments(asset: Asset, llm: MultimodalClient, wav_path: Path, work_dir: Path, duration: float | None):
-    """整段或分片转写。返回 (全文, segments[{start,end,text}])，供"找说过某段话"使用。"""
+    """整段或分片转写。返回 (全文, segments[{start,end,text}])，供"找说过某段话"使用。
+
+    分片数按提取窗口（min(duration, audio_max_seconds)，wav 本身就截到这里）计算，
+    并受 max_asr_chunks 上限约束——上限必须覆盖整个窗口，否则尾部内容搜不到。
+    只对真实发生的转写调用记账。
+    """
     chunk = settings.asr_chunk_seconds
     if not duration or duration <= chunk:
         text = llm.transcribe_audio(wav_path)
-        record_usage(asset.id, settings.asr_model, "asr")
         if not text:
             return None, None
         text = text.strip()
+        record_usage(asset.id, settings.asr_model, "asr")
         return text, [{"start": 0, "end": round(duration or 0, 1), "text": text}]
 
-    n = min(int(math.ceil(duration / chunk)), settings.max_asr_chunks)
+    window = min(duration, settings.audio_max_seconds)
+    n = min(int(math.ceil(window / chunk)), settings.max_asr_chunks)
     segments: list[dict] = []
     parts: list[str] = []
     for i in range(n):
@@ -127,9 +133,9 @@ def _transcribe_segments(asset: Asset, llm: MultimodalClient, wav_path: Path, wo
         if not seg:
             continue
         text = llm.transcribe_audio(seg)
-        record_usage(asset.id, settings.asr_model, "asr")
         if text and text.strip():
             text = text.strip()
+            record_usage(asset.id, settings.asr_model, "asr")
             parts.append(text)
             segments.append({
                 "start": round(start, 1),
@@ -208,8 +214,8 @@ def process_image(asset: Asset, llm: MultimodalClient, data_root: Path) -> Proce
     model = _route_vision_model(max_side)
     result.vision_model = model
     vision = llm.vision_describe(b64, "image/jpeg", model=model)
-    record_usage(asset.id, model, "vision")
     if vision:
+        record_usage(asset.id, model, "vision")
         result.description = vision.description
         result.tags = vision.tags
         result.ocr_text = vision.ocr
@@ -235,8 +241,8 @@ def process_document(asset: Asset, llm: MultimodalClient, data_root: Path) -> Pr
     if text:
         result.text_content = text[:TEXT_LIMIT]
         summary = llm.summarize_text(text[:3000])
-        record_usage(asset.id, settings.llm_model, "summary")
         if summary:
+            record_usage(asset.id, settings.llm_model, "summary")
             result.description = summary.summary
             result.tags = summary.tags
     else:
@@ -316,12 +322,12 @@ def process_video(asset: Asset, llm: MultimodalClient, data_root: Path) -> Proce
                     img.load()
                     model = _route_vision_model(max(img.size))
                     vision = llm.vision_describe(_image_to_b64(img), "image/jpeg", model=model)
-                    record_usage(asset.id, model, "vision")
                     result.vision_model = model
             except Exception as e:
                 logger.warning("关键帧理解失败 %s: %s", f.name, e)
                 continue
             if vision:
+                record_usage(asset.id, model, "vision")
                 if vision.description:
                     descs.append(vision.description)
                 tags.extend(vision.tags)
@@ -340,8 +346,8 @@ def process_video(asset: Asset, llm: MultimodalClient, data_root: Path) -> Proce
 
         if not result.description and result.transcript:
             summary = llm.summarize_text(result.transcript[:3000])
-            record_usage(asset.id, settings.llm_model, "summary")
             if summary:
+                record_usage(asset.id, settings.llm_model, "summary")
                 result.description = summary.summary
                 result.tags = summary.tags
     finally:
@@ -378,8 +384,8 @@ def process_audio(asset: Asset, llm: MultimodalClient, data_root: Path) -> Proce
 
         if result.transcript:
             summary = llm.summarize_text(result.transcript[:3000])
-            record_usage(asset.id, settings.llm_model, "summary")
             if summary:
+                record_usage(asset.id, settings.llm_model, "summary")
                 result.description = summary.summary
                 result.tags = summary.tags
     finally:

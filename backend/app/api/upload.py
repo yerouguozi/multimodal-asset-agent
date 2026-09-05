@@ -1,6 +1,7 @@
 """上传接口：检测模态 → SHA-256 去重 → 落盘 → 入队处理。"""
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import logging
 import re
@@ -20,6 +21,8 @@ from ..usage import ESTIMATED_CALLS, ensure_quota
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["upload"])
+
+_UPLOAD_CHUNK = 1024 * 1024  # 流式写盘的分块大小
 
 _EXT_MODALITY: dict[str, str] = {
     ".jpg": "image", ".jpeg": "image", ".png": "image", ".gif": "image",
@@ -53,8 +56,36 @@ def _safe_ext(filename: str) -> str:
     return Path(filename).suffix.lower()[:10]
 
 
-def _sha256(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
+async def _stream_to_disk(f: UploadFile, target: Path) -> tuple[Path, str, int]:
+    """分块把上传流写进 .part 临时文件（不整读进内存），返回 (临时路径, sha256, 字节数)。
+
+    超过 max_upload_mb 抛 413；写盘走线程池，避免阻塞事件循环。
+    去重哈希在流式写入过程中顺带计算，因此去重判断移到落盘之后。
+    """
+    max_bytes = settings.max_upload_mb * 1024 * 1024
+    if f.size is not None and f.size > max_bytes:
+        raise HTTPException(413, f"文件超过大小上限 {settings.max_upload_mb} MB")
+    tmp = target.with_name(target.name + ".part")
+    digest = hashlib.sha256()
+    written = 0
+    loop = asyncio.get_running_loop()
+    fp = await loop.run_in_executor(None, tmp.open, "wb")
+    try:
+        while True:
+            chunk = await f.read(_UPLOAD_CHUNK)
+            if not chunk:
+                break
+            written += len(chunk)
+            if written > max_bytes:
+                raise HTTPException(413, f"文件超过大小上限 {settings.max_upload_mb} MB")
+            digest.update(chunk)
+            await loop.run_in_executor(None, fp.write, chunk)
+    except BaseException:
+        fp.close()
+        tmp.unlink(missing_ok=True)
+        raise
+    await loop.run_in_executor(None, fp.close)
+    return tmp, digest.hexdigest(), written
 
 
 @router.post("/upload", response_model=UploadResult)
@@ -72,28 +103,35 @@ async def upload(
             items.append(UploadItem(error=f"不支持的文件类型: {f.filename or ''}"))
             continue
 
-        content = await f.read()
-        if not content:
-            items.append(UploadItem(error=f"空文件: {f.filename}"))
-            continue
-
-        digest = _sha256(content)
-        existing = (
-            db.query(Asset)
-            .filter(Asset.sha256 == digest, Asset.owner == owner, Asset.deleted_at.is_(None))
-            .first()
-        )
-        if existing:
-            items.append(UploadItem(duplicate_of=existing.id))
-            continue
-
         ext = _safe_ext(f.filename or "file")
         storage_name = f"{uuid.uuid4().hex}{ext}"
         rel_dir = Path(settings.upload_dir).name
         rel_path = f"{rel_dir}/{modality}/{storage_name}"
         target = settings.upload_path / modality / storage_name
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(content)
+
+        # 流式落盘（先写 .part 临时文件），sha256 边写边算
+        try:
+            tmp, digest, size = await _stream_to_disk(f, target)
+        except HTTPException as e:
+            items.append(UploadItem(error=str(e.detail)))
+            continue
+        if size == 0:
+            tmp.unlink(missing_ok=True)
+            items.append(UploadItem(error=f"空文件: {f.filename}"))
+            continue
+
+        existing = (
+            db.query(Asset)
+            .filter(Asset.sha256 == digest, Asset.owner == owner, Asset.deleted_at.is_(None))
+            .first()
+        )
+        if existing:
+            tmp.unlink(missing_ok=True)
+            items.append(UploadItem(duplicate_of=existing.id))
+            continue
+
+        tmp.replace(target)
 
         asset = Asset(
             owner=owner,
@@ -101,7 +139,7 @@ async def upload(
             original_filename=f.filename or storage_name,
             modality=modality,
             mime_type=f.content_type or "",
-            size_bytes=len(content),
+            size_bytes=size,
             storage_path=rel_path,
             sha256=digest,
             status="pending",

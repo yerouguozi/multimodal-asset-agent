@@ -25,6 +25,8 @@ class LocalVectorStore:
     def __init__(self, path: Path) -> None:
         self.path = path
         self._spaces: dict[str, dict[int, np.ndarray]] = {}
+        # 归一化矩阵缓存：add/delete/clear 时失效，查询免重复归一化
+        self._norm_cache: dict[str, tuple[list[int], "np.ndarray"]] = {}
         self._load()
 
     def __len__(self) -> int:
@@ -38,15 +40,26 @@ class LocalVectorStore:
 
     def add(self, asset_id: int, vector: list[float], model: str) -> None:
         self._spaces.setdefault(model, {})[asset_id] = np.asarray(vector, dtype=np.float32)
+        self._norm_cache.pop(model, None)
         self._save(model)
 
     def delete(self, asset_id: int) -> None:
+        self.delete_ids([asset_id])
+
+    def delete_ids(self, ids: list[int]) -> None:
+        """批量删除（purge 素材时顺带清理它的全部 chunk 向量）。"""
+        if not ids:
+            return
+        id_set = set(ids)
         for space in self._spaces.values():
-            space.pop(asset_id, None)
+            for i in id_set:
+                space.pop(i, None)
+        self._norm_cache.clear()
         self._save_all()
 
     def clear(self) -> None:
         self._spaces.clear()
+        self._norm_cache.clear()
         for f in self.path.parent.glob(f"{self.path.stem}_*.npz"):
             f.unlink(missing_ok=True)
 
@@ -55,11 +68,16 @@ class LocalVectorStore:
         space = self._spaces.get(model, {})
         if not space or query_vec is None:
             return {}
-        ids = list(space.keys())
-        mat = np.stack(list(space.values()))
+        cached = self._norm_cache.get(model)
+        if cached is None:
+            ids = list(space.keys())
+            mat = np.stack(list(space.values()))
+            matn = mat / (np.linalg.norm(mat, axis=1, keepdims=True) + 1e-9)
+            cached = (ids, matn)
+            self._norm_cache[model] = cached
+        ids, matn = cached
         q = np.asarray(query_vec, dtype=np.float32)
         qn = q / (np.linalg.norm(q) + 1e-9)
-        matn = mat / (np.linalg.norm(mat, axis=1, keepdims=True) + 1e-9)
         sims = matn @ qn
         order = np.argsort(-sims)[:top_k]
         return {ids[i]: float(sims[i]) for i in order if sims[i] > 0}

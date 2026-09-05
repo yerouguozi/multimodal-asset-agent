@@ -14,8 +14,9 @@ from sqlalchemy.orm import Session
 from .auth import resolve_owner
 from ..core.config import settings
 from ..core.database import SessionLocal, get_db
-from ..models import Asset, Tag, utcnow
+from ..models import Asset, DocumentChunk, IngestionJob, Tag, utcnow
 from ..pipeline.manager import manager
+from ..retrieval.chunk_vector import chunk_vector_store
 from ..retrieval.vector_store import vector_store
 from ..schemas import AssetListOut, AssetOut, AssetPatch, AssetStatsOut
 from ..usage import ESTIMATED_CALLS, ensure_quota
@@ -93,7 +94,7 @@ def restore_asset(asset_id: int, db: Session = Depends(get_db), owner: str = Dep
 
 @router.delete("/trash/{asset_id}")
 def purge_asset(asset_id: int, db: Session = Depends(get_db), owner: str = Depends(resolve_owner)):
-    """彻底删除：移除磁盘文件与向量，不可恢复。"""
+    """彻底删除：移除磁盘文件、素材与 chunk 向量、分块与任务记录，不可恢复。"""
     asset = (
         db.query(Asset)
         .filter(Asset.id == asset_id, Asset.owner == owner, Asset.deleted_at.is_not(None))
@@ -101,6 +102,10 @@ def purge_asset(asset_id: int, db: Session = Depends(get_db), owner: str = Depen
     )
     if asset is None:
         raise HTTPException(404, "回收站中没有该素材")
+    chunk_ids = [
+        row[0]
+        for row in db.query(DocumentChunk.id).filter(DocumentChunk.asset_id == asset_id).all()
+    ]
     for rel in (asset.storage_path, asset.thumbnail_path):
         if not rel:
             continue
@@ -110,6 +115,10 @@ def purge_asset(asset_id: int, db: Session = Depends(get_db), owner: str = Depen
         except OSError:
             pass
     vector_store.delete(asset_id)
+    chunk_vector_store.delete_ids(chunk_ids)
+    # chunk/任务行没有级联关系，显式清掉避免孤儿数据累积（UsageLog 保留作成本历史）
+    db.query(DocumentChunk).filter(DocumentChunk.asset_id == asset_id).delete(synchronize_session=False)
+    db.query(IngestionJob).filter(IngestionJob.asset_id == asset_id).delete(synchronize_session=False)
     db.delete(asset)
     db.commit()
     return {"ok": True, "id": asset_id}

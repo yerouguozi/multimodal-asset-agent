@@ -249,7 +249,7 @@ export default function AssetGrid({
                   {a.media_url && (
                     <a
                       className="asset-action"
-                      href={a.media_url}
+                      href={mediaHref(a.media_url)}
                       download={a.original_filename || a.name}
                       aria-label={`下载素材 #${a.id} ${a.name}`}
                       title="下载原文件"

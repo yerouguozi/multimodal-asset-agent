@@ -21,6 +21,15 @@ from ..core.config import settings
 
 logger = logging.getLogger(__name__)
 
+# SiliconFlow embeddings 单请求批量实测 ≥257 条可用（bge-m3，2026-09）；
+# 取 64 兼顾批量效率与单请求体积（chunk 最长 420 字符）
+EMBED_BATCH_SIZE = 64
+
+
+# SiliconFlow 限流表现为 HTTP 429（body 里的 1305/1302），服务端抖动是 5xx——这些值得退避重试；
+# 其余 4xx（401 鉴权、400 参数等）重试只是白等，立即失败并透传真实错误
+_RETRYABLE_STATUS = frozenset({429, 500, 502, 503, 504})
+
 
 class LLMError(Exception):
     pass
@@ -90,24 +99,34 @@ class MultimodalClient:
 
     # ---------- 网络基座 ----------
 
-    def _post(self, url: str, payload: dict, headers: dict, timeout: float | None = None) -> dict:
+    def _send(self, request) -> dict:
+        """统一重试基座：限流/服务端错误/网络错误指数退避，其余 4xx 立即抛出。"""
         last_err: Exception | None = None
         for attempt in range(1, self.settings.llm_max_retries + 1):
             try:
-                resp = httpx.post(
-                    url,
-                    json=payload,
-                    headers=headers,
-                    timeout=timeout or self.settings.llm_timeout,
-                )
+                resp = request()
                 if resp.status_code >= 400:
-                    raise LLMError(f"HTTP {resp.status_code}: {resp.text[:300]}")
-                return resp.json()
-            except (httpx.TimeoutException, httpx.TransportError, LLMError) as e:
+                    err = LLMError(f"HTTP {resp.status_code}: {resp.text[:300]}")
+                    if resp.status_code not in _RETRYABLE_STATUS:
+                        raise err
+                    last_err = err
+                else:
+                    return resp.json()
+            except (httpx.TimeoutException, httpx.TransportError) as e:
                 last_err = e
-                if attempt < self.settings.llm_max_retries:
-                    time.sleep(1.5**attempt)
+            if attempt < self.settings.llm_max_retries:
+                time.sleep(1.5**attempt)
         raise last_err if last_err else LLMError("unknown error")
+
+    def _post(self, url: str, payload: dict, headers: dict, timeout: float | None = None) -> dict:
+        return self._send(
+            lambda: httpx.post(
+                url,
+                json=payload,
+                headers=headers,
+                timeout=timeout or self.settings.llm_timeout,
+            )
+        )
 
     # ---------- 视觉理解 ----------
 
@@ -163,6 +182,23 @@ class MultimodalClient:
             logger.warning("embed_texts 失败（已降级为仅关键词检索）: %s", e)
             return None
         return [d["embedding"] for d in data.get("data", [])]
+
+    def embed_texts_batched(
+        self, texts: list[str], batch_size: int = EMBED_BATCH_SIZE
+    ) -> list[list[float]] | None:
+        """分批 embedding：文档 chunk 多时拆成多次请求，单批超限不会拖垮整批。
+
+        任意一批失败返回 None（与 embed_texts 的降级语义一致），调用方整体降级。
+        """
+        if not texts:
+            return None
+        vecs: list[list[float]] = []
+        for i in range(0, len(texts), batch_size):
+            part = self.embed_texts(texts[i : i + batch_size])
+            if not part:
+                return None
+            vecs.extend(part)
+        return vecs
 
     # ---------- 重排 ----------
 
@@ -322,24 +358,15 @@ class MultimodalClient:
     # ---------- 语音转写 ----------
 
     def _post_multipart(self, url: str, data: dict, files: dict, headers: dict) -> dict:
-        last_err: Exception | None = None
-        for attempt in range(1, self.settings.llm_max_retries + 1):
-            try:
-                resp = httpx.post(
-                    url,
-                    data=data,
-                    files=files,
-                    headers=headers,
-                    timeout=self.settings.llm_timeout,
-                )
-                if resp.status_code >= 400:
-                    raise LLMError(f"HTTP {resp.status_code}: {resp.text[:300]}")
-                return resp.json()
-            except (httpx.TimeoutException, httpx.TransportError, LLMError) as e:
-                last_err = e
-                if attempt < self.settings.llm_max_retries:
-                    time.sleep(1.5**attempt)
-        raise last_err if last_err else LLMError("unknown error")
+        return self._send(
+            lambda: httpx.post(
+                url,
+                data=data,
+                files=files,
+                headers=headers,
+                timeout=self.settings.llm_timeout,
+            )
+        )
 
     def transcribe_audio(self, path: Path) -> str | None:
         """音频转写（SiliconFlow /audio/transcriptions）。失败降级返回 None，不影响入库。"""

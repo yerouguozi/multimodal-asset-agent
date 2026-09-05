@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     ingestion_mode: str = "async"  # async | sync
     worker_count: int = 2
     max_retries: int = 3
+    max_upload_mb: int = 100  # 单文件大小上限（上传时流式校验，超限 413）
 
     # CORS
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
@@ -53,9 +54,10 @@ class Settings(BaseSettings):
     image_gen_model: str = "Qwen/Qwen-Image"
     image_gen_size: str = "1024x1024"
 
-    # 音视频时间戳分片转写
+    # 音视频时间戳分片转写：上限必须覆盖 audio_max_seconds 的提取窗口
+    # （600 秒 / 30 秒 = 20 段），否则长音频后半段永远搜不到
     asr_chunk_seconds: int = 30
-    max_asr_chunks: int = 10
+    max_asr_chunks: int = 20
 
     # 向量后端：local（默认，零依赖）| milvus（可选）
     vector_backend: str = "local"

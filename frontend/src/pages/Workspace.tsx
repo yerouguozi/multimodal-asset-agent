@@ -105,6 +105,17 @@ export default function Workspace() {
     refreshMeta();
   }, [refreshMeta]);
 
+  // 上传/文生图后素材要经历 pending → processing → ready，列表里有未就绪素材时轮询刷新
+  useEffect(() => {
+    const inProgress = assets.some((a) => a.status === "pending" || a.status === "processing");
+    if (!inProgress) return;
+    const t = window.setTimeout(() => {
+      void load();
+      refreshMeta();
+    }, 4000);
+    return () => window.clearTimeout(t);
+  }, [assets, load, refreshMeta]);
+
   const handleSearch = async () => {
     const q = query.trim();
     if (q) {
@@ -216,7 +227,7 @@ export default function Workspace() {
   };
 
   const handleDelete = async (id: number) => {
-    if (!window.confirm("确定删除这个素材？删除后不可恢复。")) return;
+        if (!window.confirm("删除后会进入回收站，可随时恢复。确定删除这个素材？")) return;
     try {
       await deleteAsset(id);
       if (selected?.id === id) setSelected(null);

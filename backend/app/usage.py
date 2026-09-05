@@ -33,7 +33,6 @@ PRICE_PER_CALL: dict[str, float] = {
     "BAAI/bge-reranker-v2-m3": 0.001,
     "FunAudioLLM/SenseVoiceSmall": 0.002,
     "Qwen/Qwen-Image": 0.05,
-    "deepseek-v4-pro": 0.01,
     "deepseek-chat": 0.01,
 }
 

@@ -81,7 +81,10 @@ async def protected_media(
     owner = "local"
     auth_value = authorization or (f"Bearer {token}" if token else None)
     if auth_value:
-        token_str = auth_value.split(" ", 1)[1].strip()
+        parts = auth_value.split(" ", 1)
+        if len(parts) != 2 or not parts[1].strip():
+            raise HTTPException(401, "token 无效或过期")
+        token_str = parts[1].strip()
         try:
             payload = pyjwt.decode(token_str, settings.jwt_secret, algorithms=["HS256"])
         except pyjwt.PyJWTError:

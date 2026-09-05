@@ -32,7 +32,8 @@ PLANNER_PROMPT = (
         f"- {t['name']}: {t['description']} 参数 {json.dumps(t['params'], ensure_ascii=False)}"
         for t in TOOL_DESCRIPTIONS
     )
-    + "\n根据用户请求把任务拆成 1-3 个工具步骤（有明确先后关系才多步，例如「先压缩再生成封面」），"
+    + "\n结合对话历史理解指代与省略（如「再来几张蓝色的」「那个视频」），"
+    "根据用户请求把任务拆成 1-3 个工具步骤（有明确先后关系才多步，例如「先压缩再生成封面」），"
     "只输出一个 JSON 对象，不要输出其他文字："
     '{"steps": [{"tool": "工具名", "args": {参数}}]}。闲聊或不需要工具时输出 {"steps": []}。'
 )
@@ -131,9 +132,14 @@ def _rule_plan(text: str) -> list[dict]:
 
 def planner_node(state: AgentState) -> dict:
     last = state["messages"][-1]["content"]
+    # 带上最近几轮对话（不含当前这条），让「再来几张蓝色的」这类追问能解析出真实意图
+    history = [
+        {"role": m["role"], "content": m["content"]}
+        for m in state["messages"][-5:-1]
+    ]
     plan: list[dict] = []
     content = llm_client.chat(
-        [{"role": "system", "content": PLANNER_PROMPT}, {"role": "user", "content": last}],
+        [{"role": "system", "content": PLANNER_PROMPT}, *history, {"role": "user", "content": last}],
         max_tokens=700,
     )
     if content:

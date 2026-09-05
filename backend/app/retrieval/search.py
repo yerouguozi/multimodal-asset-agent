@@ -2,6 +2,8 @@
 
 设计要点（含金量所在）：
 - BM25 用 jieba 分词 + 字符二元组兜底（中文子串也能召回）；
+- 分字段 token 按素材缓存（index_cache），命中缓存零分词；
+  过滤下推 SQL、只查轻量列，融合后仅为 top-N 候选取完整素材行；
 - 字段权重随素材分布自适应：视频/音频占比高 → 转写匹配权重更高（领域由数据决定）；
 - 向量召回在 embedding 可用时启用，与 BM25 用 RRF(60) 融合；
 - 重排模型可用时对 top-N 精排，失败自动降级为 RRF 结果。
@@ -15,24 +17,15 @@ from sqlalchemy.orm import Session
 
 from ..core.config import settings
 from ..llm.client import client as llm_client
-from ..models import Asset
+from ..models import Asset, Tag
 from .bm25 import BM25, tokenize
+from .index_cache import adaptive_weights, docs_for, searchable_text
 from .vector_store import vector_store
 
 logger = logging.getLogger(__name__)
 
 RRF_K = 60
 RERANK_CANDIDATES = 20
-
-FIELD_WEIGHTS: dict[str, float] = {
-    "name": 2.0,
-    "description": 1.2,
-    "ocr": 0.8,
-    "transcript": 1.0,
-    "text_content": 1.0,
-    "tags": 1.0,
-}
-
 
 _VISUAL_KEYWORDS = (
     "色", "蓝", "红", "绿", "黄", "紫", "橙", "夜空", "天空", "雪", "灯光", "玻璃",
@@ -44,37 +37,6 @@ _VISUAL_KEYWORDS = (
 def _is_visual_query(query: str) -> bool:
     """查询是否带视觉特征（颜色/形状/光影），决定是否启用图片级多模态向量。"""
     return any(k in query for k in _VISUAL_KEYWORDS)
-
-def _searchable_text(asset: Asset) -> dict[str, str]:
-    return {
-        "name": asset.name,
-        "description": asset.description or "",
-        "ocr": asset.ocr_text or "",
-        "transcript": asset.transcript or "",
-        "text_content": asset.text_content or "",
-        "tags": " ".join(t.name for t in asset.tags),
-    }
-
-
-def _adaptive_weights(assets: list[Asset]) -> dict[str, float]:
-    n = len(assets) or 1
-    video_share = sum(1 for a in assets if a.modality == "video") / n
-    audio_share = sum(1 for a in assets if a.modality == "audio") / n
-    weights = dict(FIELD_WEIGHTS)
-    weights["transcript"] = round(1.0 + 0.5 * video_share + 0.3 * audio_share, 3)
-    return weights
-
-
-def _build_docs(assets: list[Asset], weights: dict[str, float]) -> list[tuple[int, Counter]]:
-    docs = []
-    for asset in assets:
-        freq: Counter[str] = Counter()
-        fields = _searchable_text(asset)
-        for field, weight in weights.items():
-            for tok in tokenize(fields[field]):
-                freq[tok] += weight
-        docs.append((asset.id, freq))
-    return docs
 
 
 def _rrf(score_lists: list[dict[int, float]], k: int = RRF_K) -> dict[int, float]:
@@ -101,25 +63,55 @@ def search(
     if not query:
         return []
 
-    q = db.query(Asset).filter(Asset.status == "ready", Asset.deleted_at.is_(None))
+    # 1) 轻量候选集：只取 id/updated_at/modality，不拉正文大文本（过滤下推 SQL）
+    q = db.query(Asset.id, Asset.updated_at, Asset.modality).filter(
+        Asset.status == "ready", Asset.deleted_at.is_(None)
+    )
     if owner:
         q = q.filter(Asset.owner == owner)
-    assets = q.all()
     if modality:
-        assets = [a for a in assets if a.modality == modality]
+        q = q.filter(Asset.modality == modality)
+    rows = q.all()
     if tag:
-        assets = [a for a in assets if any(t.name == tag for t in a.tags)]
-    if not assets:
+        tagged = {t[0] for t in db.query(Tag.asset_id).filter(Tag.name == tag).all()}
+        rows = [r for r in rows if r.id in tagged]
+    if not rows:
         return []
 
-    # 1) BM25 关键词召回
-    weights = _adaptive_weights(assets)
-    bm25 = BM25(_build_docs(assets, weights))
-    bm25_scores = bm25.score(tokenize(query))
-    # 零分不参与 RRF（否则每个素材都会拿到 1/61 的保底分）
-    bm25_scores = {k: v for k, v in bm25_scores.items() if v > 0}
+    # 2) BM25 文档：指纹 = updated_at + 标签集合，内容/标签变更自动失效
+    tag_rows = (
+        db.query(Tag.asset_id, Tag.id, Tag.name)
+        .filter(Tag.asset_id.in_([r.id for r in rows]))
+        .all()
+    )
+    tags_by_asset: dict[int, list[tuple[int, str]]] = {}
+    for asset_id, tid, name in tag_rows:
+        tags_by_asset.setdefault(asset_id, []).append((tid, name))
+    fingerprints = {
+        r.id: (r.updated_at, tuple(sorted(tags_by_asset.get(r.id, []))))
+        for r in rows
+    }
+    field_tokens = docs_for(db, fingerprints)
+    ids = [r.id for r in rows if r.id in field_tokens]
+    if not ids:
+        return []
 
-    # 2) 向量召回：文本向量（bge-m3）+ 图片向量（VL-Embedding，tri/full/gate 启用）
+    weights = adaptive_weights([r.modality for r in rows])
+    docs: list[tuple[int, Counter]] = []
+    for aid in ids:
+        freq: Counter = Counter()
+        for field, toks in field_tokens[aid].items():
+            weight = weights.get(field)
+            if not weight:
+                continue
+            for tok in toks:
+                freq[tok] += weight
+        docs.append((aid, freq))
+    bm25 = BM25(docs)
+    # 零分不参与 RRF（否则每个素材都会拿到 1/61 的保底分）
+    bm25_scores = {k: v for k, v in bm25.score(tokenize(query)).items() if v > 0}
+
+    # 3) 向量召回：文本向量（bge-m3）+ 图片向量（VL-Embedding，tri/full/gate 启用）
     score_lists: list[dict[int, float]] = [bm25_scores]
     if strategy in ("rrf", "tri", "gate", "full") and len(vector_store) > 0:
         try:
@@ -138,19 +130,25 @@ def search(
         except Exception as e:
             logger.warning("多模态向量检索失败（已降级）: %s", e)
 
-    # 3) RRF 融合（两路或三路）
+    # 4) RRF 融合（两路或三路），只把 top-N 候选的完整素材行取出来
     fused = _rrf(score_lists)
     ranked = sorted(fused.items(), key=lambda x: x[1], reverse=True)[: max(limit, RERANK_CANDIDATES)]
     if not ranked:
         return []
+    allowed = {r.id for r in rows}
+    top_ids = [i for i, _ in ranked]
+    cand_q = db.query(Asset).filter(
+        Asset.id.in_(top_ids), Asset.status == "ready", Asset.deleted_at.is_(None)
+    )
+    if owner:
+        cand_q = cand_q.filter(Asset.owner == owner)
+    asset_by_id = {a.id: a for a in cand_q}
+    candidates = [(asset_by_id[i], s) for i, s in ranked if i in asset_by_id and i in allowed]
 
-    asset_by_id = {a.id: a for a in assets}
-    candidates = [(asset_by_id[i], s) for i, s in ranked if i in asset_by_id]
-
-    # 4) 重排精排（失败自动降级）
+    # 5) 重排精排（失败自动降级）
     if strategy == "full" and len(candidates) >= 2:
         try:
-            texts = [" ".join(v for v in _searchable_text(a).values())[:500] for a, _ in candidates]
+            texts = [" ".join(v for v in searchable_text(a).values())[:500] for a, _ in candidates]
             rerank_scores = llm_client.rerank(query, texts)
             if rerank_scores:
                 candidates = [(a, rerank_scores[i]) for i, (a, _) in enumerate(candidates)]

@@ -4,7 +4,7 @@ import io
 from PIL import Image
 
 from app.core.database import SessionLocal
-from app.llm.client import VisionResult, client as llm_client
+from app.llm.client import SummaryResult, VisionResult, client as llm_client
 from app.models import UsageLog
 from app.usage import record_usage
 
@@ -21,6 +21,11 @@ def test_usage_logs_isolated_per_owner(client, monkeypatch):
         llm_client,
         "vision_describe",
         lambda b64, mime, model=None: VisionResult(description="城市夜景", tags=["夜景"], ocr=""),
+    )
+    monkeypatch.setattr(
+        llm_client,
+        "summarize_text",
+        lambda text: SummaryResult(summary="文档摘要", tags=["文档"]),
     )
     _upload_png(client, "访客图片.png")
 

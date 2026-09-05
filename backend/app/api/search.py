@@ -61,9 +61,12 @@ async def search_by_image(
 ):
     ensure_quota(owner, ESTIMATED_CALLS["image_search"])
     """以图搜图：上传参考图，按视觉相似度检索。"""
-    content = await file.read()
+    max_bytes = settings.max_upload_mb * 1024 * 1024
+    content = await file.read(max_bytes + 1)
     if not content:
         raise HTTPException(400, "空文件")
+    if len(content) > max_bytes:
+        raise HTTPException(413, f"图片超过大小上限 {settings.max_upload_mb} MB")
     b64 = base64.b64encode(content).decode("ascii")
     vec = llm_client.embed_image(b64, file.content_type or "image/jpeg")
     if not vec:
