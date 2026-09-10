@@ -23,6 +23,11 @@ services:
       MILVUS_URI: http://milvus:19530
     volumes:
       - ./backend/data:/app/data
+    depends_on:
+      milvus:
+        # 仅 milvus profile 启用时等待其健康；不开 milvus 时跳过（required=false）
+        condition: service_healthy
+        required: false
     ports:
       - "8000:8000"
     restart: unless-stopped
@@ -39,6 +44,12 @@ services:
       - "19530:19530"
     volumes:
       - ./backend/data/milvus:/var/lib/milvus
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
 
   frontend:
     build:
