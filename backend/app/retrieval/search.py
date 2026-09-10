@@ -6,6 +6,7 @@
   过滤下推 SQL、只查轻量列，融合后仅为 top-N 候选取完整素材行；
 - 字段权重随素材分布自适应：视频/音频占比高 → 转写匹配权重更高（领域由数据决定）；
 - 向量召回在 embedding 可用时启用，与 BM25 用 RRF(60) 融合；
+- VL 图片向量按查询意图门控启用（gate.py：向量质心判定，向量不可用回退关键词规则）；
 - 重排模型可用时对 top-N 精排，失败自动降级为 RRF 结果。
 """
 from __future__ import annotations
@@ -19,6 +20,8 @@ from ..core.config import settings
 from ..llm.client import client as llm_client
 from ..models import Asset, Tag
 from .bm25 import BM25, tokenize
+from .gate import decide as gate_decide
+from .gate import keyword_is_visual
 from .index_cache import adaptive_weights, docs_for, searchable_text
 from .vector_store import vector_store
 
@@ -26,17 +29,6 @@ logger = logging.getLogger(__name__)
 
 RRF_K = 60
 RERANK_CANDIDATES = 20
-
-_VISUAL_KEYWORDS = (
-    "色", "蓝", "红", "绿", "黄", "紫", "橙", "夜空", "天空", "雪", "灯光", "玻璃",
-    "镜面", "方块", "剪影", "夜景", "晚霞", "像素", "阳光", "海面", "山", "楼", "光",
-    "画面", "图", "条纹", "彩色",
-)
-
-
-def _is_visual_query(query: str) -> bool:
-    """查询是否带视觉特征（颜色/形状/光影），决定是否启用图片级多模态向量。"""
-    return any(k in query for k in _VISUAL_KEYWORDS)
 
 
 def _rrf(score_lists: list[dict[int, float]], k: int = RRF_K) -> dict[int, float]:
@@ -58,7 +50,7 @@ def search(
     strategy: str = "full",
     owner: str | None = None,
 ) -> list[tuple[Asset, float]]:
-    """strategy: bm25=仅关键词 / rrf=关键词+向量 / full=再加重排（默认）。"""
+    """strategy: bm25=仅关键词 / rrf=关键词+向量 / gate=门控+VL / full=再加重排（默认）。"""
     query = (query or "").strip()
     if not query:
         return []
@@ -113,15 +105,26 @@ def search(
 
     # 3) 向量召回：文本向量（bge-m3）+ 图片向量（VL-Embedding，tri/full/gate 启用）
     score_lists: list[dict[int, float]] = [bm25_scores]
-    if strategy in ("rrf", "tri", "gate", "full") and len(vector_store) > 0:
+    text_vec: list[float] | None = None
+    if strategy in ("rrf", "tri", "gate", "gate_kw", "full") and len(vector_store) > 0:
         try:
             vecs = llm_client.embed_texts([query])
             if vecs:
-                score_lists.append(vector_store.search(vecs[0], settings.embedding_model, top_k=50))
+                text_vec = vecs[0]
+                score_lists.append(vector_store.search(text_vec, settings.embedding_model, top_k=50))
         except Exception as e:
             logger.warning("文本向量检索失败，退回关键词: %s", e)
-    # 门控：仅"视觉查询"启用图片级多模态向量（否则 VL 噪声会淹没语义查询）
-    use_vl = strategy in ("tri", "full") or (strategy == "gate" and _is_visual_query(query))
+    # 门控：仅"视觉查询"启用图片级多模态向量（否则 VL 噪声会淹没语义查询）。
+    # gate=向量质心门控（v2，查询向量复用上面已算好的 text_vec，零额外调用）；
+    # gate_kw=关键词规则（v1，保留供消融评测）；向量不可用时 gate 自动回退 v1 规则。
+    if strategy in ("tri", "full"):
+        use_vl = True
+    elif strategy == "gate":
+        use_vl = gate_decide(query, text_vec).is_visual
+    elif strategy == "gate_kw":
+        use_vl = keyword_is_visual(query)
+    else:
+        use_vl = False
     if use_vl:
         try:
             vecs = llm_client.embed_texts_vl([query])

@@ -100,6 +100,32 @@ VISUAL_QUERIES: list[dict] = [
 QUERIES = QUERIES + VISUAL_QUERIES
 
 
+# ---------- 门控专项探针（深度三期） ----------
+
+# 库外门控探针：与 gate.py 种子集、上面评测查询集均不相交，
+# 专测门控对"新词/跨语言"的泛化。只用于门控准确率评测，不进检索指标。
+GATE_PROBES: list[dict] = [
+    # 中文新词/口语视觉描述（关键词表覆盖不到的说法）
+    {"query": "霓虹灯牌在雨夜的街头闪烁", "visual": True},
+    {"query": "毛茸茸的橘猫趴在窗台打盹", "visual": True},
+    {"query": "热气腾腾的咖啡杯特写", "visual": True},
+    {"query": "磨砂玻璃后面模糊的人影", "visual": True},
+    {"query": "晚高峰车流拉出的光轨", "visual": True},
+    # 英文视觉描述（关键词表完全失效，多语言嵌入应可分）
+    {"query": "a snowy mountain peak at sunrise", "visual": True},
+    {"query": "neon lights reflected on wet asphalt", "visual": True},
+    {"query": "golden wheat field under blue sky", "visual": True},
+    # 中文任务/主题意图（找内容不找画面，不该开 VL）
+    {"query": "适合开会放的励志视频", "visual": False},
+    {"query": "备考数据库的复习资料", "visual": False},
+    {"query": "学街舞的入门课程", "visual": False},
+    {"query": "求职简历怎么写", "visual": False},
+    # 英文任务/主题意图
+    {"query": "podcast about artificial intelligence", "visual": False},
+    {"query": "music for focus and study", "visual": False},
+]
+
+
 def _draw_night(p) -> None:
     import random
 

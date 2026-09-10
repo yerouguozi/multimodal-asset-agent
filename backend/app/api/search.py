@@ -20,7 +20,7 @@ from .auth import resolve_owner
 
 router = APIRouter(prefix="/api/search", tags=["search"])
 
-VALID_STRATEGIES = ("full", "rrf", "gate", "tri", "bm25")
+VALID_STRATEGIES = ("full", "rrf", "gate", "gate_kw", "tri", "bm25")
 
 
 @router.get("", response_model=SearchResponse)

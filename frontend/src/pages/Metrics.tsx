@@ -8,7 +8,8 @@ import { fmtDateTime } from "../time";
 const STRATEGY_LABEL: Record<string, string> = {
   full: "full（含重排）",
   rrf: "RRF 融合",
-  gate: "门控三路",
+  gate: "向量门控三路",
+  gate_kw: "关键词门控(v1)",
   tri: "朴素三路",
   bm25: "仅 BM25",
 };

@@ -326,11 +326,11 @@ export default function Landing() {
           </div>
           <div className="eval-card">
             <div className="eval-num">0.956</div>
-            <div className="eval-cap">Recall@5 · 门控三路融合</div>
+            <div className="eval-cap">Recall@5 · 向量门控三路融合</div>
             <div className="bar">
               <i style={{ width: "95.6%" }} />
             </div>
-            <p>朴素多模态融合是负结果，门控启用后全场最高</p>
+            <p>朴素多模态融合是负结果，向量门控启用后全场最高</p>
           </div>
           <div className="eval-card">
             <div className="eval-num">0.893</div>
