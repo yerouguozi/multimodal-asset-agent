@@ -1,6 +1,7 @@
 """应用入口：FastAPI + 生命周期（建表/启动 worker）+ 静态资源。"""
 from __future__ import annotations
 
+import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -13,12 +14,18 @@ from .core.config import BASE_DIR, settings
 from .core.database import init_db
 from .pipeline.manager import manager
 
+logger = logging.getLogger(__name__)
+
 STATIC_DIR = BASE_DIR / "static"
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    if settings.jwt_secret.startswith("dev-secret"):
+        logger.warning(
+            "JWT_SECRET 仍是默认开发值，任何人可伪造 token——生产部署务必在 .env 覆盖为长随机串"
+        )
     await manager.start()
     yield
     await manager.stop()

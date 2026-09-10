@@ -8,6 +8,7 @@
 from datetime import datetime, timezone
 
 from sqlalchemy import (
+    Boolean,
     DateTime,
     Float,
     ForeignKey,
@@ -175,6 +176,10 @@ class SearchLog(Base):
     hits_count: Mapped[int] = mapped_column(Integer, default=0)
     latency_ms: Mapped[int] = mapped_column(Integer, default=0)
     top_ids: Mapped[str] = mapped_column(Text, default="[]")
+    # 门控决策可观测：method=vector|keyword|always_on|disabled；margin=质心相似度差
+    gate_method: Mapped[str] = mapped_column(String(20), default="")
+    gate_margin: Mapped[float | None] = mapped_column(Float, nullable=True)
+    gate_visual: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 

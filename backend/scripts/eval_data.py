@@ -85,7 +85,7 @@ QUERIES: list[dict] = [
     {"query": "汽车报价", "relevant": []},
 ]
 
-# ---------- 视觉评测扩展（深度二期） ----------
+# ---------- 跨模态评测扩展（深度二期） ----------
 
 # 纯视觉查询：与素材描述/标签无表面词重叠，只有"看懂图片"才能命中
 VISUAL_QUERIES: list[dict] = [
@@ -97,7 +97,20 @@ VISUAL_QUERIES: list[dict] = [
     {"query": "暖色灯光下的食物近景", "relevant": ["美食摄影.jpg"]},
 ]
 
-QUERIES = QUERIES + VISUAL_QUERIES
+# ---------- 跨语言检索评测（深度三期） ----------
+
+# 英文查询 × 中文语料：bge-m3 多语言同空间，语义可匹配；
+# visual 字段标记查询意图类型，供门控决策统计使用（不参与检索指标标注）。
+CROSS_LINGUAL_QUERIES: list[dict] = [
+    {"query": "city skyline at night", "relevant": ["城市夜景.jpg"], "visual": True},
+    {"query": "sunset over the sea", "relevant": ["海边日落.png"], "visual": True},
+    {"query": "snow mountain under blue sky", "relevant": ["雪山风景.jpg"], "visual": True},
+    {"query": "modern glass building facade", "relevant": ["科技大楼.jpg"], "visual": True},
+    {"query": "cooking tutorial video", "relevant": ["烹饪教程.mp4"], "visual": False},
+    {"query": "team meeting recording", "relevant": ["会议录音.mp3"], "visual": False},
+]
+
+QUERIES = QUERIES + VISUAL_QUERIES + CROSS_LINGUAL_QUERIES
 
 
 # ---------- 门控专项探针（深度三期） ----------

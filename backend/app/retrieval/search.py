@@ -49,8 +49,12 @@ def search(
     limit: int = 20,
     strategy: str = "full",
     owner: str | None = None,
+    gate_info: dict | None = None,
 ) -> list[tuple[Asset, float]]:
-    """strategy: bm25=仅关键词 / rrf=关键词+向量 / gate=门控+VL / full=再加重排（默认）。"""
+    """strategy: bm25=仅关键词 / rrf=关键词+向量 / gate=门控+VL / full=再加重排（默认）。
+
+    gate_info 传入 dict 时回填门控决策（method/margin/is_visual），供检索日志落库。
+    """
     query = (query or "").strip()
     if not query:
         return []
@@ -119,12 +123,19 @@ def search(
     # gate_kw=关键词规则（v1，保留供消融评测）；向量不可用时 gate 自动回退 v1 规则。
     if strategy in ("tri", "full"):
         use_vl = True
+        decision = ("always_on", None, True)
     elif strategy == "gate":
-        use_vl = gate_decide(query, text_vec).is_visual
+        d = gate_decide(query, text_vec)
+        use_vl = d.is_visual
+        decision = (d.method, d.margin, d.is_visual)
     elif strategy == "gate_kw":
         use_vl = keyword_is_visual(query)
+        decision = ("keyword", None, use_vl)
     else:
         use_vl = False
+        decision = ("disabled", None, None)
+    if gate_info is not None:
+        gate_info["method"], gate_info["margin"], gate_info["is_visual"] = decision
     if use_vl:
         try:
             vecs = llm_client.embed_texts_vl([query])

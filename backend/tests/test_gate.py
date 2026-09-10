@@ -131,3 +131,35 @@ def test_gate_kw_strategy_skips_vector_gate(monkeypatch):
     with SessionLocal() as db:
         hits = search_service.search(db, "夜景", strategy="gate_kw")
     assert hits and hits[0][0].name == "城市夜景.png"
+
+
+# ---------- 门控决策落日志 + 指标聚合 ----------
+
+
+def test_gate_decision_logged_and_aggregated(client):
+    _seed_asset("城市夜景.png")
+    from app import models
+    from app.core.database import SessionLocal
+
+    r = client.get("/api/search", params={"q": "深蓝色夜空", "strategy": "gate"})
+    assert r.status_code == 200
+    with SessionLocal() as db:
+        log = db.query(models.SearchLog).order_by(models.SearchLog.id.desc()).first()
+        # 测试环境无 API Key：向量门控降级为关键词判定，决策仍必须落库
+        assert log is not None
+        assert log.gate_method in ("vector", "keyword")
+        assert log.gate_visual is True  # 「深蓝色夜空」应判视觉
+    m = client.get("/api/metrics/search")
+    gate = m.json()["gate"]
+    assert gate["by_method"].get(log.gate_method, 0) >= 1
+
+
+def test_search_without_gate_info_still_works(client):
+    # gate_info 是可选参数：Agent 工具等老调用方不传也不受影响
+    _seed_asset("城市夜景.png")
+    from app.core.database import SessionLocal
+    from app.retrieval import search as search_service
+
+    with SessionLocal() as db:
+        hits = search_service.search(db, "夜景", strategy="gate")
+    assert hits and hits[0][0].name == "城市夜景.png"

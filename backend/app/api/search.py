@@ -36,7 +36,10 @@ def search(
     if strategy not in VALID_STRATEGIES:
         raise HTTPException(422, f"strategy 可选：{', '.join(VALID_STRATEGIES)}")
     t0 = time.perf_counter()
-    hits = search_service.search(db, q, modality=modality, tag=tag, limit=limit, strategy=strategy, owner=owner)
+    gate_info: dict = {}
+    hits = search_service.search(
+        db, q, modality=modality, tag=tag, limit=limit, strategy=strategy, owner=owner, gate_info=gate_info
+    )
     record_search(
         db,
         owner=owner,
@@ -46,6 +49,9 @@ def search(
         modality=modality or "",
         strategy=strategy,
         top_ids=[a.id for a, _ in hits],
+        gate_method=gate_info.get("method", ""),
+        gate_margin=gate_info.get("margin"),
+        gate_visual=gate_info.get("is_visual"),
     )
     return SearchResponse(
         query=q,

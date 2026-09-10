@@ -14,6 +14,13 @@ const STRATEGY_LABEL: Record<string, string> = {
   bm25: "仅 BM25",
 };
 
+const GATE_METHOD_LABEL: Record<string, string> = {
+  vector: "向量质心(v2)",
+  keyword: "关键词(v1 兜底)",
+  always_on: "策略直通(VL 全开)",
+  disabled: "未启用 VL",
+};
+
 export default function Metrics() {
   const [data, setData] = useState<SearchMetrics | null>(null);
   const [error, setError] = useState("");
@@ -130,6 +137,43 @@ export default function Metrics() {
                     </div>
                   )}
                 </div>
+
+                {Object.keys(data.gate?.by_method ?? {}).length > 0 && (
+                  <div className="metric-card">
+                    <h2>
+                      <Activity size={15} />
+                      门控决策
+                    </h2>
+                    {(() => {
+                      const entries = Object.entries(data.gate.by_method);
+                      const total = entries.reduce((s, [, c]) => s + c, 0) || 1;
+                      return (
+                        <>
+                          <div className="metric-group">
+                            <h3>按判定方式</h3>
+                            {entries.map(([k, c]) => (
+                              <div key={k} className="metric-row">
+                                <span>{GATE_METHOD_LABEL[k] ?? k}</span>
+                                <div className="bar">
+                                  <i style={{ width: `${(c / total) * 100}%` }} />
+                                </div>
+                                <b>{c}</b>
+                              </div>
+                            ))}
+                          </div>
+                          <div className="metric-group">
+                            <h3>判定统计</h3>
+                            <p className="metric-empty" style={{ textAlign: "left" }}>
+                              判为视觉查询占比：
+                              {data.gate.visual_ratio != null ? `${(data.gate.visual_ratio * 100).toFixed(1)}%` : "—"}
+                              ；平均 margin：{data.gate.avg_margin != null ? data.gate.avg_margin.toFixed(4) : "—"}
+                            </p>
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </div>
+                )}
               </section>
             )}
 
@@ -149,6 +193,7 @@ export default function Metrics() {
                     <span>策略</span>
                     <span>耗时</span>
                     <span>命中</span>
+                    <span>门控</span>
                   </div>
                   {[...data.recent].reverse().map((r, i) => (
                     <div key={`${r.created_at}-${i}`} className="ev-row">
@@ -158,6 +203,9 @@ export default function Metrics() {
                       <span>{STRATEGY_LABEL[r.strategy] ?? r.strategy}</span>
                       <span>{r.latency_ms}ms</span>
                       <span>{r.hits_count}</span>
+                      <span>
+                        {r.gate_method ? `${GATE_METHOD_LABEL[r.gate_method] ?? r.gate_method}${r.gate_margin != null ? ` (${r.gate_margin >= 0 ? "+" : ""}${r.gate_margin.toFixed(3)})` : ""}` : "—"}
+                      </span>
                     </div>
                   ))}
                 </div>

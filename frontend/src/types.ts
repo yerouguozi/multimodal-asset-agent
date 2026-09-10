@@ -155,6 +155,11 @@ export interface SearchMetrics {
   avg_hits: number;
   by_source: Record<string, number>;
   by_strategy: Record<string, number>;
+  gate: {
+    by_method: Record<string, number>;
+    visual_ratio: number | null;
+    avg_margin: number | null;
+  };
   top_queries: { query: string; count: number; avg_latency_ms: number }[];
   recent: {
     created_at: string;
@@ -163,5 +168,7 @@ export interface SearchMetrics {
     strategy: string;
     latency_ms: number;
     hits_count: number;
+    gate_method?: string;
+    gate_margin?: number | null;
   }[];
 }

@@ -19,6 +19,9 @@ def record_search(
     modality: str = "",
     strategy: str = "full",
     top_ids: list[int] | None = None,
+    gate_method: str = "",
+    gate_margin: float | None = None,
+    gate_visual: bool | None = None,
 ) -> None:
     db.add(
         SearchLog(
@@ -30,6 +33,9 @@ def record_search(
             hits_count=int(hits_count),
             latency_ms=int(latency_ms),
             top_ids=json.dumps(top_ids or [], ensure_ascii=False)[:2000],
+            gate_method=(gate_method or "")[:20],
+            gate_margin=gate_margin,
+            gate_visual=gate_visual,
         )
     )
     db.commit()

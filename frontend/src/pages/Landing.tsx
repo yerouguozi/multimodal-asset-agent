@@ -317,15 +317,15 @@ export default function Landing() {
         </div>
         <div className="eval-grid">
           <div className="eval-card">
-            <div className="eval-num">0.789</div>
+            <div className="eval-num">0.814</div>
             <div className="eval-cap">Recall@1 · 精排后</div>
             <div className="bar">
               <i style={{ width: "78.9%" }} />
             </div>
-            <p>纯 BM25 基线 0.611 → 重排兜底后 0.789</p>
+            <p>纯 BM25 基线 0.539 → 重排兜底后 0.814</p>
           </div>
           <div className="eval-card">
-            <div className="eval-num">0.956</div>
+            <div className="eval-num">0.961</div>
             <div className="eval-cap">Recall@5 · 向量门控三路融合</div>
             <div className="bar">
               <i style={{ width: "95.6%" }} />

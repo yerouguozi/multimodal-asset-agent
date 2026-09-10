@@ -31,6 +31,7 @@ def search_metrics(db: Session = Depends(get_db), owner: str = Depends(resolve_o
             "avg_hits": 0.0,
             "by_source": {},
             "by_strategy": {},
+            "gate": {},
             "top_queries": [],
             "recent": [],
         }
@@ -51,6 +52,15 @@ def search_metrics(db: Session = Depends(get_db), owner: str = Depends(resolve_o
     ]
     by_source: Counter[str] = Counter(r.source for r in rows)
     by_strategy: Counter[str] = Counter(r.strategy or "full" for r in rows)
+    # 门控决策分布：method=vector|keyword 是真实判定，always_on/disabled 是策略直通
+    gate_rows = [r for r in rows if r.gate_method]
+    margins = sorted(r.gate_margin for r in gate_rows if r.gate_margin is not None)
+    decided = [r for r in gate_rows if r.gate_visual is not None and r.gate_method in ("vector", "keyword")]
+    gate = {
+        "by_method": dict(Counter(r.gate_method for r in gate_rows)),
+        "visual_ratio": round(sum(1 for r in decided if r.gate_visual) / len(decided), 3) if decided else None,
+        "avg_margin": round(sum(margins) / len(margins), 4) if margins else None,
+    }
     recent = [
         {
             "created_at": r.created_at.isoformat(),
@@ -59,6 +69,8 @@ def search_metrics(db: Session = Depends(get_db), owner: str = Depends(resolve_o
             "strategy": r.strategy or "full",
             "latency_ms": r.latency_ms,
             "hits_count": r.hits_count,
+            "gate_method": r.gate_method or "",
+            "gate_margin": r.gate_margin,
         }
         for r in rows[-15:]
     ]
@@ -69,6 +81,7 @@ def search_metrics(db: Session = Depends(get_db), owner: str = Depends(resolve_o
         "avg_hits": round(sum(hits) / len(hits), 2),
         "by_source": dict(by_source),
         "by_strategy": dict(by_strategy),
+        "gate": gate,
         "top_queries": top_queries,
         "recent": recent,
     }

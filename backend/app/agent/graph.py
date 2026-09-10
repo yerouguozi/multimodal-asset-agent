@@ -26,6 +26,14 @@ _TOOL_INTENT = {
     "find_passage": "passage",
 }
 
+
+def _to_int(v) -> int:
+    """宽容解析 LLM 给的实体 id：'#1' / '1' / 1 / None → int（引用记号常被带进参数）。"""
+    if v is None:
+        return 0
+    m = re.search(r"\d+", str(v))
+    return int(m.group()) if m else 0
+
 PLANNER_PROMPT = (
     "你是素材库智能助手的任务规划器。可用工具：\n"
     + "\n".join(
@@ -175,14 +183,14 @@ def tool_node(state: AgentState) -> dict:
         if tool == "search_assets":
             result = TOOL_REGISTRY["search_assets"](args.get("query", ""))
         elif tool == "get_asset_detail":
-            result = TOOL_REGISTRY["get_asset_detail"](int(args.get("asset_id") or 0))
+            result = TOOL_REGISTRY["get_asset_detail"](_to_int(args.get("asset_id")))
         elif tool == "domain_profile":
             result = TOOL_REGISTRY["domain_profile"]()
         elif tool == "generate_image":
             result = TOOL_REGISTRY["generate_image"](args.get("prompt", ""))
         elif tool == "transform_asset":
             result = TOOL_REGISTRY["transform_asset"](
-                int(args.get("asset_id") or 0), args.get("operation", "compress"), args.get("params") or {}
+                _to_int(args.get("asset_id")), args.get("operation", "compress"), args.get("params") or {}
             )
         elif tool == "find_moment":
             result = TOOL_REGISTRY["find_moment"](args.get("query", ""))

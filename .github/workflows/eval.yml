@@ -1,0 +1,41 @@
+name: Nightly Eval
+
+# 评测不是一次性表演：每天定时用真实模型重跑检索评测，
+# 报告与前端 eval.json 同源自动生成；有变化时自动提交（[skip ci] 防止触发常规 CI）。
+on:
+  schedule:
+    - cron: "0 3 * * *" # 每天 UTC 3 点（北京时间 11 点）
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+      - name: 安装依赖
+        run: pip install -r requirements.txt
+      - name: 运行检索评测（需要 SILICONFLOW_API_KEY）
+        env:
+          SILICONFLOW_API_KEY: ${{ secrets.SILICONFLOW_API_KEY }}
+        run: python scripts/eval_retrieval.py
+      - name: 提交报告变化
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add ../docs/eval-reports ../frontend/public/eval.json
+          if git diff --cached --quiet; then
+            echo "评测结果无变化，跳过提交"
+          else
+            git commit -m "chore: nightly 检索评测报告更新 [skip ci]"
+            git push
+          fi

@@ -56,6 +56,16 @@ def _migrate_columns() -> None:
             if "deleted_at" not in cols:
                 conn.execute(text("ALTER TABLE assets ADD COLUMN deleted_at DATETIME"))
             try:
+                cols = {c["name"] for c in inspect(engine).get_columns("search_logs")}
+                if "gate_method" not in cols:
+                    conn.execute(text("ALTER TABLE search_logs ADD COLUMN gate_method VARCHAR(20) DEFAULT ''"))
+                if "gate_margin" not in cols:
+                    conn.execute(text("ALTER TABLE search_logs ADD COLUMN gate_margin FLOAT"))
+                if "gate_visual" not in cols:
+                    conn.execute(text("ALTER TABLE search_logs ADD COLUMN gate_visual BOOLEAN"))
+            except Exception:
+                pass
+            try:
                 cols = {c["name"] for c in inspect(engine).get_columns("document_chunks")}
                 if "modality" not in cols:
                     conn.execute(text("ALTER TABLE document_chunks ADD COLUMN modality VARCHAR(20) DEFAULT 'document'"))
